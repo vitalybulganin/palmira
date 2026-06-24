@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.5)
 project(palmira)
 
 find_package(MoonyCode REQUIRED)
@@ -6,16 +6,28 @@ find_package(MoonyCode REQUIRED)
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_CXX_STANDARD 17)
 
+# Set output folders
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin CACHE PATH "Single Directory for all")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib CACHE PATH "Single Directory for all")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib CACHE PATH "Single Directory for all")
+
 if(MSVC)
 	set(XXX_SUF -win)
 else()
 	set(XXX_SUF -nix)
 endif()
 
+# Options
 option(SANITIZE_ENABLED "Enable sanitize" OFF)
 option(PROFILER_ENABLED "Enable profile" OFF)
 option(gRPC_API_ENABLED "Enable gRPC support" OFF)
 option(HTTP_API_ENABLED "Enable HTTP/1.1 support" ON)
+option(BUILD_THIRDPARTY_MODULES "Build third-party modules" ON)
+
+# Checking dependency modules.
+#-------------------------------------------------------------------------#
+include(cmake/dependencies.cmake)
+#-------------------------------------------------------------------------#
 
 # add_compile_options(-DDEBUG_TOOLS)
 #
@@ -38,9 +50,12 @@ include_directories(
 	./
 	contrib)
 
-add_subdirectory(contrib/mtc)
-add_subdirectory(contrib/DeliriX)
-add_subdirectory(contrib/structo)
+set(GRPC_LIBS)
+set(HTTP_LIBS)
+
+if (BUILD_THIRDPARTY_MODULES)
+    add_subdirectory(contrib)
+endif (BUILD_THIRDPARTY_MODULES)
 
 add_subdirectory(plugins/morpho-ru)
 
@@ -93,7 +108,9 @@ if(gRPC_API_ENABLED)
 endif()
 
 if(HTTP_API_ENABLED)
-	add_subdirectory(
+    set(HTTP_LIBS httpapi remottp)
+
+    add_subdirectory(
 		contrib/remottp)
 	add_library(httpapi
 		src/network/http/jsload.cpp
@@ -123,24 +140,9 @@ add_executable(palmira
 	src/palmira.cpp
 	src/netServer.cpp)
 
+#[[<TODO>
 add_executable(k2
 	src/k2.cpp)
-
-target_link_libraries(palmira
-	${GRPC_LIBS}
-	httpapi
-	tripoli
-	structo
-	DeliriX
-	remottp
-	${MoonyCode_LIB}
-	mtc
-	tinyxml2
-	minizip
-	z
-	pthread
-	dl)
-
 target_link_libraries(k2
 	remottp
 	tripoli
@@ -154,6 +156,22 @@ target_link_libraries(k2
 	z
 	pthread
 	dl)
+]]
 
-add_subdirectory(utils)
-add_subdirectory(tests)
+target_link_libraries(palmira
+	${GRPC_LIBS}
+	${HTTP_LIBS}
+	tripoli
+	structo
+	DeliriX
+	${MoonyCode_LIB}
+	mtc
+	tinyxml2
+	minizip
+	z
+	pthread
+	dl)
+
+#<TODO> add_subdirectory(utils)
+#<TODO> add_subdirectory(tests)
+add_subdirectory(plugins)
