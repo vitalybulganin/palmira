@@ -1,8 +1,8 @@
 /*!==========================================================================
 * \file
 * - Program:       docapi-http
-* - File:          server.h
-* - Created:       06/23/2026
+* - File:          docexcept.h
+* - Created:       06/24/2026
 * - Author:        Vitaly Bulganin
 * - Description:
 * - Comments:
@@ -14,18 +14,22 @@
 ===========================================================================*/
 #pragma once
 //-------------------------------------------------------------------------//
-#ifndef __SERVER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
-#define __SERVER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
+#ifndef __DOCEXCEPT_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
+#define __DOCEXCEPT_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
 //-------------------------------------------------------------------------//
-#include "server.hpp"
+#include <string>
+#include <stdexcept>
 //-------------------------------------------------------------------------//
-using server_t = mtc::api<palmira::IServer>;
+namespace docapi::common {
 //-------------------------------------------------------------------------//
-/**
- * Creates a new server.
- * @param listening_port [in] - A listening port.
- * @return A server instance.
- */
-auto createServer(std::uint16_t listening_port) -> server_t;
+  struct json_parse_error final : public std::invalid_argument {
+    /**
+     * Constructor.
+     * @param msg [in] - Error message.
+     */
+    explicit json_parse_error(const std::string &msg);
+  };
 //-------------------------------------------------------------------------//
-#endif // __SERVER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
+} // namespace docapi::common
+//-------------------------------------------------------------------------//
+#endif // __DOCEXCEPT_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__

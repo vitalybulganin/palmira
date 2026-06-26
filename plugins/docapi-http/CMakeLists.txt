@@ -7,6 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(DOCAPI_BUILD_SHARED "Build module as shared library" ON)
 option(DOCAPI_ENABLE_SSL "Enable SSL support through uWebSockets" ON)
+option(BUILD_DOCAPI_SERVER "Building dockapi server sample" OFF)
 
 set(BUILD_MODULE_TYPE STATIC)
 set(UWEBSOCKETS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/uWebSockets)
@@ -51,6 +52,16 @@ target_link_libraries(${PROJECT_NAME}
         simdjson::simdjson
 
     PRIVATE
+        tripoli
+        structo
+        DeliriX
+        ${MoonyCode_LIB}
+        mtc
+        tinyxml2
+        minizip
+        z
+        pthread
+        dl
         usockets
         z
 )
@@ -60,3 +71,7 @@ if (DOCAPI_ENABLE_SSL)
 else ()
     target_compile_definitions(${PROJECT_NAME} PUBLIC DOCAPI_ENABLE_SSL=0)
 endif ()
+
+if (BUILD_DOCAPI_SERVER)
+    add_subdirectory(samples)
+endif (BUILD_DOCAPI_SERVER)

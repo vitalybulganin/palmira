@@ -21,6 +21,8 @@
 #include <string>
 #include <string_view>
 //-------------------------------------------------------------------------//
+#include <mtc/zmap.h>
+//-------------------------------------------------------------------------//
 namespace uWS {
 //-------------------------------------------------------------------------//
   template<bool SSL>
@@ -49,6 +51,8 @@ namespace docapi::http {
     //!< Keeps a response body.
     std::string body;
   };
+//-------------------------------------------------------------------------//
+  auto make_json_response(const mtc::zmap &zmap) -> service_response;
 //-------------------------------------------------------------------------//
   template<bool SSL>
   void send_json_response(response_context<SSL> *ctx, const service_response &response);

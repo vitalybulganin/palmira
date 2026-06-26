@@ -55,6 +55,9 @@ set(HTTP_LIBS)
 
 if (BUILD_THIRDPARTY_MODULES)
     add_subdirectory(contrib)
+
+    set_target_properties(mtc PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    set_target_properties(DeliriX PROPERTIES POSITION_INDEPENDENT_CODE ON)
 endif (BUILD_THIRDPARTY_MODULES)
 
 add_subdirectory(plugins/morpho-ru)

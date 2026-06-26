@@ -69,13 +69,17 @@ namespace docapi::http {
     response.body += R"(",)";
     response.body += R"("reason":")";
     response.body += to_escape(reason);
-    response.body += R"(\)";
+    response.body += R"(")";
     response.body += "},";
     response.body += R"("status":)";
     response.body += std::to_string(status);
     response.body += "}";
 
     send_json_response(ctx, response);
+  }
+//-------------------------------------------------------------------------//
+  auto make_json_response(const mtc::zmap &zmap) -> service_response {
+    return {};
   }
 //-------------------------------------------------------------------------//
   template

@@ -53,7 +53,7 @@ namespace docapi::common {
     //!< Keeps a request timeout (30 sec).
     std::chrono::milliseconds request_timeout{30000};
 
-    docapi::common::ssl ssl;
+    docapi::common::ssl ssl = {};
   };
 //-------------------------------------------------------------------------//
 } // namespace docapi::common

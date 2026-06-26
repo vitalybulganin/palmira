@@ -51,6 +51,10 @@ namespace docapi::http {
 //-------------------------------------------------------------------------//
   } // namespace
 //-------------------------------------------------------------------------//
+  auto document_get_options::as_zval() const noexcept -> mtc::zval {
+    return {};
+  }
+//-------------------------------------------------------------------------//
   query_params_t parse_query(std::string_view query) {
     query_params_t params;
 
@@ -128,26 +132,52 @@ namespace docapi::http {
     return default_value;
   }
 
-  index_document_request make_index_request(std::string index, std::string id, std::string body, const query_params_t &params) {
-    index_document_request request;
+  auto make_index_request(std::string index, std::string id, std::string body, const query_params_t &params)  -> palmira::InsertArgs {
+    palmira::InsertArgs args;
 
-    request.index = std::move(index);
-    request.id = std::move(id);
-    request.body = std::move(body);
+/*<TODO>
+    args.index = std::move(index);
+    args.id = std::move(id);
+    args.body = std::move(body);
 
     if (const auto it = params.find("routing"); it != params.end()) {
-      request.routing = it->second;
+      args.routing = it->second;
     }
 
     if (const auto it = params.find("refresh"); it != params.end()) {
-      request.refresh = it->second;
+      args.refresh = it->second;
     }
 
     if (const auto it = params.find("pipeline"); it != params.end()) {
-      request.pipeline = it->second;
+      args.pipeline = it->second;
+    }
+*/
+
+    return args;
+  }
+
+  auto make_iupdate_request(std::string index, std::string id, std::string body, const query_params_t &params)  -> palmira::UpdateArgs {
+    palmira::UpdateArgs args;
+
+/*<TODO>
+    args.index = std::move(index);
+    args.id = std::move(id);
+    args.body = std::move(body);
+
+    if (const auto it = params.find("routing"); it != params.end()) {
+      args.routing = it->second;
     }
 
-    return request;
+    if (const auto it = params.find("refresh"); it != params.end()) {
+      args.refresh = it->second;
+    }
+
+    if (const auto it = params.find("pipeline"); it != params.end()) {
+      args.pipeline = it->second;
+    }
+*/
+
+    return args;
   }
 //-------------------------------------------------------------------------//
 } // namespace docapi::http

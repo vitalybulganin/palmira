@@ -22,6 +22,8 @@
 #include <optional>
 #include <unordered_map>
 //-------------------------------------------------------------------------//
+#include <service.hpp>
+//-------------------------------------------------------------------------//
 namespace docapi::http {
 //-------------------------------------------------------------------------//
   using query_params_t = std::unordered_map<std::string, std::string>;
@@ -40,6 +42,8 @@ namespace docapi::http {
     std::string stored_fields;
     std::string version;
     std::string version_type;
+
+    auto as_zval() const noexcept -> mtc::zval;
   };
 
   struct index_document_request {
@@ -120,7 +124,17 @@ namespace docapi::http {
    * @param params [in] - Query params.
    * @return Index document request.
    */
-  index_document_request make_index_request(std::string index, std::string id, std::string body, const query_params_t &params);
+  palmira::InsertArgs make_index_request(std::string index, std::string id, std::string body, const query_params_t &params);
+
+  /**
+   * Makes index document request.
+   * @param index [in] - Index name.
+   * @param id [in] - Document ID.
+   * @param body [in] - Document body.
+   * @param params [in] - Query params.
+   * @return Index document request.
+   */
+  palmira::UpdateArgs make_update_request(std::string index, std::string id, std::string body, const query_params_t &params);
 //-------------------------------------------------------------------------//
 } // namespace docapi::http
 //-------------------------------------------------------------------------//

@@ -95,11 +95,14 @@ namespace docapi {
     template<bool SSL, typename Response, typename Request>
     auto onindex(Response *res, Request *req) -> void;
 
+    template<bool SSL, typename Response, typename Request>
+    auto onput(Response *res, Request *req) -> void;
+
     template <bool SSL, typename Response, typename Request>
     auto onget(Response *res, Request *req) -> void;
 
     template<typename Response, typename Fn>
-    auto onsubmit(Response *res, std::shared_ptr<async_response_state> state, Fn &&fn) -> void;
+    auto onsubmit(Response *res, const std::shared_ptr<async_response_state>& state, Fn &&fn) -> void;
 
   private:
     auto onloop() -> void;
@@ -109,7 +112,7 @@ namespace docapi {
   template <bool SSL>
   auto HttpServer::register_routes(uWS::TemplatedApp<SSL> &app) -> void {
     app.put("/:index/_doc/:id", [this](auto *res, auto *req) {
-      this->onindex<SSL>(res, req);
+      this->onput<SSL>(res, req);
     });
 
     app.post("/:index/_doc", [this](auto *res, auto *req) {
@@ -136,12 +139,13 @@ namespace docapi {
   template<bool SSL, typename Response, typename Request>
   auto HttpServer::onindex(Response *res, Request *req) -> void {
     auto state = std::make_shared<async_response_state>();
+
     res->onAborted([state]() {
       state->aborted.store(true, std::memory_order_release);
     });
 
     const std::string index(req->getParameter(0));
-    const std::string id = req->getParameter(1).empty() ? std::string{} : std::string(req->getParameter(1));
+    const std::string request_id = req->getParameter(1).empty() ? std::string{} : std::string(req->getParameter(1));
     const auto params = http::parse_query(req->getQuery());
 
     auto body = std::make_shared<std::string>();
@@ -149,7 +153,7 @@ namespace docapi {
     // Reserving resources.
     body->reserve(4096);
 
-    res->onData([this, res, state, index, id, params, body](std::string_view chunk, bool last) mutable {
+    res->onData([this, res, state, index, request_id, params, body](std::string_view chunk, bool last) mutable {
       if (state->aborted.load(std::memory_order_acquire)) {
         return;
       }
@@ -159,26 +163,70 @@ namespace docapi {
         res->writeStatus("413 Payload Too Large")->end(http::make_error_json("payload_too_large", "request body is too large"));
         return;
       }
-
       body->append(chunk.data(), chunk.size());
 
       if (not last) {
         return;
       }
 
-      auto request = http::make_index_request(index, id, std::move(*body), params);
-
-/*<TODO> Add impl
-      this->onsubmit(res, state, [service = this->service, request = std::move(request), create_only]() mutable {
-        return create_only ? service->CreateDocument(std::move(request)) : service->IndexDocument(std::move(request));
+      // Forwarding a request to search engine.
+      this->onsubmit(res, state, [service = this->service, index, request_id, body = std::move(*body), params, timeout = this->config.request_timeout.count()]() mutable {
+        return service->Insert(http::make_index_request(index, request_id, std::move(body), params))->Wait(timeout);
       });
-*/
+    });
+  }
+
+  template<bool SSL, typename Response, typename Request>
+  auto HttpServer::onput(Response *res, Request *req) -> void {
+    auto state = std::make_shared<async_response_state>();
+
+    res->onAborted([state]() {
+      state->aborted.store(true, std::memory_order_release);
+    });
+
+    const std::string index(req->getParameter(0));
+    const std::string request_id = req->getParameter(1).empty() ? std::string{} : std::string(req->getParameter(1));
+    const auto params = http::parse_query(req->getQuery());
+
+    auto body = std::make_shared<std::string>();
+
+    // Reserving resources.
+    body->reserve(4096);
+
+    res->onData([this, res, state, index, request_id, params, body](std::string_view chunk, bool last) mutable {
+      if (state->aborted.load(std::memory_order_acquire)) {
+        return;
+      }
+
+      if (body->size() + chunk.size() > config.max_body_size) {
+        state->aborted.store(true, std::memory_order_release);
+        res->writeStatus("413 Payload Too Large")->end(http::make_error_json("payload_too_large", "request body is too large"));
+        return;
+      }
+      body->append(chunk.data(), chunk.size());
+
+      if (not last) {
+        return;
+      }
+
+      // Forwarding a request to search engine.
+      this->onsubmit(res, state, [service = this->service, index, request_id, body = std::move(*body), params, timeout = this->config.request_timeout.count()]() mutable {
+        return service->Update(http::make_index_request(index, request_id, std::move(body), params))->Wait(timeout);
+      });
     });
   }
 
   template<bool SSL, typename Response, typename Request>
   auto HttpServer::onget(Response *res, Request *req) -> void {
     auto ctx = std::make_shared<http::response_context<SSL>>(res);
+    const auto params = http::parse_query(req->getQuery());
+    const auto routing = http::get_query_param(params, "routing");
+    const http::document_get_item doc{
+      .index = std::string(req->getParameter(0)),
+      .id = std::string(req->getParameter(1)),
+      .routing = routing.has_value() ? routing.value() : "",
+      .options = http::parse_get_options(params)
+    };
 
     res->onAborted([ctx]() {
       ctx->aborted.store(true, std::memory_order_release);
@@ -188,19 +236,13 @@ namespace docapi {
      * uWebSockets response живёт только в родном event-loop потоке.
      * Тяжёлая работа уходит в ThreadPool, а ответ возвращается через loop->defer().
      */
-    this->pool.enqueue([service = this->service, ctx, req, loop = uWS::Loop::get()]() mutable {
-      const auto params = http::parse_query(req->getQuery());
-      const auto routing = http::get_query_param(params, "routing");
-      const http::document_get_item doc{
-        .index = std::string(req->getParameter(0)),
-        .id = std::string(req->getParameter(1)),
-        .routing = routing.has_value() ? routing.value() : "",
-        .options = http::parse_get_options(params)
-      };
-
+    this->pool.enqueue([service = this->service, ctx, doc, params, loop = uWS::Loop::get()]() mutable {
       try {
         palmira::SearchArgs search;
 
+        if (service == nullptr) {
+          throw (std::invalid_argument("Search engine not created"));
+        }
         // Forwarding a search request into search engine.
         service->Search(search, [ctx, loop](const mtc::zmap &resp) {
           http::service_response reply;
@@ -213,43 +255,42 @@ namespace docapi {
               return;
             }
 
-            // Replying a response.
+            // Replying to a response.
             http::send_json_response(ctx.get(), reply);
           });
         });
       } catch (const std::exception &exc) {
-        // Replying error response.
+        // Replying to error response.
         http::send_error_response(ctx.get(), 500, "internal_server_error", exc.what());
       } catch (...) {
-        // Replying error response.
+        // Replying to error response.
         http::send_error_response(ctx.get(), 500, "internal_server_error", "unknown");
       }
     });
   }
 
   template<typename Response, typename Fn>
-  auto HttpServer::onsubmit(Response* res, std::shared_ptr<async_response_state> state, Fn &&fn) -> void {
-    auto *loop = this->loop;
-
-    const bool posted = this->pool.enqueue([loop, res, state, fn = std::forward<Fn>(fn)]() mutable {
-      http::service_response response;
+  auto HttpServer::onsubmit(Response *res, const std::shared_ptr<async_response_state> &state, Fn &&fn) -> void {
+    const bool posted = this->pool.enqueue([loop = this->loop, res, state, fn = std::forward<Fn>(fn)]() mutable {
+      auto reply = http::service_response();
 
       try {
-        response = fn();
+        // Making a response from zmap
+        reply = http::make_json_response(fn());
       } catch (const std::exception &exc) {
-        response.status = 500;
-        response.body = http::make_error_json("internal_error", exc.what());
+        reply.status = 500;
+        reply.body = http::make_error_json("internal_error", exc.what());
       } catch (...) {
-        response.status = 500;
-        response.body = http::make_error_json("internal_error", "unknown error");
+        reply.status = 500;
+        reply.body = http::make_error_json("internal_error", "unknown error");
       }
 
-      loop->defer([res, state, response = std::move(response)]() mutable {
+      loop->defer([res, state, reply = std::move(reply)]() mutable {
         if (state->aborted.load(std::memory_order_acquire)) {
           return;
         }
 
-        res->writeStatus(http::status_to_string(response.status))->writeHeader("Content-Type", response.content_type)->end(response.body);
+        res->writeStatus(http::status_to_string(reply.status))->writeHeader("Content-Type", reply.content_type)->end(reply.body);
       });
     });
 
