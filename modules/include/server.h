@@ -18,14 +18,18 @@
 #define __SERVER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
 //-------------------------------------------------------------------------//
 #include "server.hpp"
+#include "service.hpp"
+#include "config.h"
 //-------------------------------------------------------------------------//
 using server_t = mtc::api<palmira::IServer>;
+using service_t = mtc::api<palmira::IService>;
 //-------------------------------------------------------------------------//
 /**
  * Creates a new server.
- * @param listening_port [in] - A listening port.
+ * @param service [in] - A service.
+ * @param config [in] - A server configuration.
  * @return A server instance.
  */
-extern "C" auto createServer(std::uint16_t listening_port) -> server_t;
+extern "C" auto createServer(service_t service, docapi::common::config config) -> server_t;
 //-------------------------------------------------------------------------//
 #endif // __SERVER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__

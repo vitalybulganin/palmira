@@ -23,6 +23,7 @@ option(PROFILER_ENABLED "Enable profile" OFF)
 option(gRPC_API_ENABLED "Enable gRPC support" OFF)
 option(HTTP_API_ENABLED "Enable HTTP/1.1 support" ON)
 option(BUILD_THIRDPARTY_MODULES "Build third-party modules" ON)
+option(BUILD_MODULES "Build palmira modules" ON)
 
 # Checking dependency modules.
 #-------------------------------------------------------------------------#
@@ -177,4 +178,10 @@ target_link_libraries(palmira
 
 #<TODO> add_subdirectory(utils)
 #<TODO> add_subdirectory(tests)
-add_subdirectory(plugins)
+
+if (BUILD_MODULES)
+	include_directories(${CMAKE_SOURCE_DIR}/modules)
+	include_directories(${CMAKE_SOURCE_DIR}/modules/include)
+
+	add_subdirectory(modules)
+endif (BUILD_MODULES)

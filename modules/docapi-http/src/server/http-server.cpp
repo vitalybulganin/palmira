@@ -6,9 +6,9 @@
 //-------------------------------------------------------------------------//
 namespace docapi {
 //-------------------------------------------------------------------------//
-  HttpServer::HttpServer(common::config cfg, mtc::api<palmira::IService> srv)
+  HttpServer::HttpServer(mtc::api<palmira::IService> srv, common::config cfg)
     : config(std::move(cfg)), service(std::move(srv)),
-      pool(std::max(1U, std::thread::hardware_concurrency() - 1)) {
+      pool(std::max(1U, config.worker_threads == 0 ? std::thread::hardware_concurrency() - 1 : config.worker_threads)) {
   }
 
  HttpServer::~HttpServer() {
@@ -25,11 +25,6 @@ namespace docapi {
 
     this->thread = std::thread([this]() {
         this->onloop();
-    });
-
-    std::unique_lock sync(this->mtx);
-    this->cv.wait(sync, [this]() {
-        return this->listen_socket != nullptr || this->start_failed;
     });
   }
 
@@ -48,6 +43,11 @@ namespace docapi {
           }
       });
     }
+
+    std::unique_lock sync(this->mtx);
+    this->cv.wait(sync, [this]() {
+        return this->listen_socket != nullptr || this->start_failed;
+    });
   }
 
   void HttpServer::Wait() {

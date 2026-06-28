@@ -45,7 +45,7 @@ namespace docapi::common {
     std::uint16_t port = 9200;
 
     //!< Keeps a number of worker threads (0 - means std::thread::hardware_concurrency() - 1).
-    std::size_t worker_threads = 0;
+    std::uint16_t worker_threads = 0U;
 
     //!< Keeps a max size of body.
     std::size_t max_body_size = 32U * 1024U * 1024U;

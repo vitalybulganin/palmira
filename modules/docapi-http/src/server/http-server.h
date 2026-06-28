@@ -26,11 +26,9 @@
 //-------------------------------------------------------------------------//
 #include <App.h>
 //-------------------------------------------------------------------------//
-#include "server.hpp"
-#include "service.hpp"
+#include "../../../include/server.h"
 //-------------------------------------------------------------------------//
 #include "../common/thread-pool.h"
-#include "../common/config.h"
 //-------------------------------------------------------------------------//
 #include "../http/errors.h"
 #include "../http/docreq.h"
@@ -39,14 +37,14 @@
 namespace docapi {
 //-------------------------------------------------------------------------//
   namespace {
+//-------------------------------------------------------------------------//
     struct async_response_state final {
       std::atomic_bool aborted{false};
     };
+//-------------------------------------------------------------------------//
   } // namespace
 //-------------------------------------------------------------------------//
   class HttpServer : public palmira::IServer {
-    using service_t = mtc::api<palmira::IService>;
-
     //!< Keeps a server config.
     const common::config config;
 
@@ -70,15 +68,15 @@ namespace docapi {
   public:
     /**
      * Constructor.
-     * @param config [in] - A server configuration.
      * @param service [in] - A search service.
+     * @param config [in] - A server configuration.
      */
-    explicit HttpServer(common::config config, mtc::api<palmira::IService> service);
+    explicit HttpServer(mtc::api<palmira::IService> service, common::config config);
 
     /**
      * Destructor.
      */
-    ~HttpServer();
+    virtual ~HttpServer();
 
     // Override methods
   public:

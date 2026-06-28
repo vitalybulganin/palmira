@@ -34,9 +34,7 @@ file(GLOB_RECURSE SOURCE_FILES src/*.cpp)
 # Building a module.
 add_library(${PROJECT_NAME} ${BUILD_MODULE_TYPE} ${SOURCE_FILES})
 
-set_target_properties(${PROJECT_NAME} PROPERTIES
-    POSITION_INDEPENDENT_CODE ON
-)
+set_target_properties(${PROJECT_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(${PROJECT_NAME}
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -44,6 +42,7 @@ target_include_directories(${PROJECT_NAME}
     PRIVATE
         ${UWEBSOCKETS_DIR}/src
         ${USOCKETS_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/modules/include
 )
 
 target_link_libraries(${PROJECT_NAME}
