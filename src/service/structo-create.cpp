@@ -41,7 +41,7 @@ namespace palmira
   {
     auto  ixpath = config.get_path( "generic_name" );
 
-    if ( ixpath != "" )
+    if ( not ixpath.empty() )
       return Open( storage::posixFS::StoragePolicies::Open( ixpath ) );
 
     throw std::invalid_argument( "neither generic index name nor index policy was found" );

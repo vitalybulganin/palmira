@@ -26,6 +26,8 @@
 //-------------------------------------------------------------------------//
 #include <App.h>
 //-------------------------------------------------------------------------//
+#include <structo/contents.hpp>
+//-------------------------------------------------------------------------//
 #include "../../../include/server.h"
 //-------------------------------------------------------------------------//
 #include "../common/thread-pool.h"
@@ -36,17 +38,20 @@
 //-------------------------------------------------------------------------//
 namespace docapi {
 //-------------------------------------------------------------------------//
-  namespace {
+  struct async_response_state final {
+    std::atomic_bool aborted{false};
+  };
 //-------------------------------------------------------------------------//
-    struct async_response_state final {
-      std::atomic_bool aborted{false};
-    };
-//-------------------------------------------------------------------------//
-  } // namespace
+  //!< Keeps a max size of body.
+  constexpr std::uint64_t max_body_size = 5*1024*1024;
+  //!< Keeps a request timeout (in milliseconds).
+  constexpr std::uint32_t request_timeout = 30000;
 //-------------------------------------------------------------------------//
   class HttpServer : public palmira::IServer {
+    using storage_t = mtc::api<structo::IStorage>;
+
     //!< Keeps a server config.
-    const common::config config;
+    const mtc::zmap settings;
 
     //!< Keeps a search service.
     service_t service;
@@ -65,13 +70,16 @@ namespace docapi {
     uWS::Loop *loop = nullptr;
     us_listen_socket_t *listen_socket = nullptr;
 
+    //!< Keeps a list of storage indexes.
+    std::unordered_map<std::string, storage_t> storages;
+
   public:
     /**
      * Constructor.
      * @param service [in] - A search service.
-     * @param config [in] - A server configuration.
+     * @param ssettings [in] - A server configuration.
      */
-    explicit HttpServer(mtc::api<palmira::IService> service, common::config config);
+    explicit HttpServer(mtc::api<palmira::IService> service, mtc::zmap ssettings);
 
     /**
      * Destructor.
@@ -145,18 +153,19 @@ namespace docapi {
     const std::string index(req->getParameter(0));
     const std::string request_id = req->getParameter(1).empty() ? std::string{} : std::string(req->getParameter(1));
     const auto params = http::parse_query(req->getQuery());
+    const auto body_size = this->settings.get_int64("max_body_size", max_body_size);
 
     auto body = std::make_shared<std::string>();
-
     // Reserving resources.
-    body->reserve(4096);
+    body->reserve(body_size);
 
-    res->onData([this, res, state, index, request_id, params, body](std::string_view chunk, bool last) mutable {
+    res->onData([this, res, state, index, request_id, params, body, body_size](std::string_view chunk, bool last) mutable {
+      const auto timeout = this->settings.get_int32("request_timeout", request_timeout);
+
       if (state->aborted.load(std::memory_order_acquire)) {
         return;
       }
-
-      if (body->size() + chunk.size() > config.max_body_size) {
+      if (body->size() + chunk.size() > body_size) {
         state->aborted.store(true, std::memory_order_release);
         res->writeStatus("413 Payload Too Large")->end(http::make_error_json("payload_too_large", "request body is too large"));
         return;
@@ -168,7 +177,7 @@ namespace docapi {
       }
 
       // Forwarding a request to search engine.
-      this->onsubmit(res, state, [service = this->service, index, request_id, body = std::move(*body), params, timeout = this->config.request_timeout.count()]() mutable {
+      this->onsubmit(res, state, [service = this->service, index, request_id, body = std::move(*body), params, timeout]() mutable {
         return service->Insert(http::make_index_request(index, request_id, std::move(body), params))->Wait(timeout);
       });
     });
@@ -185,18 +194,20 @@ namespace docapi {
     const std::string index(req->getParameter(0));
     const std::string request_id = req->getParameter(1).empty() ? std::string{} : std::string(req->getParameter(1));
     const auto params = http::parse_query(req->getQuery());
+    const auto body_size = this->settings.get_int64("max_body_size", max_body_size);
 
     auto body = std::make_shared<std::string>();
-
     // Reserving resources.
-    body->reserve(4096);
+    body->reserve(body_size);
 
-    res->onData([this, res, state, index, request_id, params, body](std::string_view chunk, bool last) mutable {
+    res->onData([this, res, state, index, request_id, params, body, body_size](std::string_view chunk, bool last) mutable {
+      const auto timeout = this->settings.get_int32("request_timeout", request_timeout);
+
       if (state->aborted.load(std::memory_order_acquire)) {
         return;
       }
 
-      if (body->size() + chunk.size() > config.max_body_size) {
+      if (body->size() + chunk.size() > body_size) {
         state->aborted.store(true, std::memory_order_release);
         res->writeStatus("413 Payload Too Large")->end(http::make_error_json("payload_too_large", "request body is too large"));
         return;
@@ -208,7 +219,7 @@ namespace docapi {
       }
 
       // Forwarding a request to search engine.
-      this->onsubmit(res, state, [service = this->service, index, request_id, body = std::move(*body), params, timeout = this->config.request_timeout.count()]() mutable {
+      this->onsubmit(res, state, [service = this->service, index, request_id, body = std::move(*body), params, timeout]() mutable {
         return service->Update(http::make_index_request(index, request_id, std::move(body), params))->Wait(timeout);
       });
     });
@@ -296,6 +307,12 @@ namespace docapi {
       res->writeStatus("503 Service Unavailable")->writeHeader("Content-Type", "application/json; charset=utf-8")->end(http::make_error_json("service_unavailable", "server is stopping"));
     }
   }
+//-------------------------------------------------------------------------//
+/**
+ * Gets a listen port.
+ * @return A listen port.
+ */
+auto getListenPort() -> std::uint16_t;
 //-------------------------------------------------------------------------//
 } // namespace docapi
 //-------------------------------------------------------------------------//

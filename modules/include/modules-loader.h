@@ -24,19 +24,24 @@
 #include <dlfcn.h>
 //-------------------------------------------------------------------------//
 class modules_loader final {
-  //!< Keeps a path of plugins.
-  const std::string plugins_path;
+  struct module_file {
+    //!< Keeps module settings.
+    const mtc::zmap settings;
+
+    //!< Keeps a handle.
+    void *handle = nullptr;
+  };
 
   //!< Keeps a list of loaded plugins.
-  mutable std::unordered_map<std::string, void *> plugins;
+  mutable std::unordered_map<std::string, std::shared_ptr<module_file>> plugins;
 
 public:
   /**
    * Constructor.
-   * @param path [in] - A path of keeping plugins.
+   * @param config [in] - A path of keeping plugins.
    */
-  explicit modules_loader(std::string path) : plugins_path(std::move(path)) {
-    auto push_module = [&](const std::string &module_name) -> void {
+  explicit modules_loader(const mtc::config &config) {
+    auto push_module = [&](const std::string &module_name, const mtc::zmap &settings) -> void {
       // Loading a module.
       auto handle = dlopen(module_name.c_str(), RTLD_NOW | RTLD_LOCAL);
       if (handle != nullptr) {
@@ -44,20 +49,44 @@ public:
         if (error == nullptr) {//<TODO> Adding error handle.
         }
 
+        auto module = std::make_shared<module_file>(module_file{
+          .settings = settings,
+          .handle = handle
+        });
+
         // Saving a new module.
-        this->plugins.emplace(module_name, static_cast<void *>(handle));
+        this->plugins.emplace(module_name, module);
       }
     };
 
-    if (std::filesystem::is_regular_file(this->plugins_path)) {
-      push_module(this->plugins_path);
-    } else {
-      for (const auto &module : std::filesystem::directory_iterator(this->plugins_path)) {
+    if (config.has_key("path") && not config.get_charstr("path").empty()) {//<TODO> Add impl settings
+      if (not std::filesystem::is_directory(config.get_charstr("path"))) {
+        throw (std::invalid_argument("Module path is not directory: " + config.get_charstr("path")));
+      }
+
+      for (const auto &module : std::filesystem::directory_iterator(config.get_charstr("path"))) {
         if (std::filesystem::is_regular_file(module.status())) {
           // Adding a new module.
-          push_module(module.path().string());
+          push_module(module.path().string(), {});
         }
       }
+    }
+
+    if (config.has_key("files") && not config.to_zmap().get_array_zmap("files", {}).empty()) {
+      for (const auto &module_settings : config.to_zmap().get_array_zmap("files", {})) {
+        const auto file_name = module_settings.get_charstr("name", "");
+        if (not file_name.empty() && not std::filesystem::is_regular_file(file_name)) {
+          std::fprintf(stderr, "Module file %s is not a regular file\n", file_name.c_str());
+          continue;
+        }
+
+        // Adding a new module.
+        push_module(file_name, module_settings);
+      }
+    }
+
+    if (this->plugins.empty()) {
+      std::fprintf(stderr, "No one module loaded\n");
     }
   }
 
@@ -66,8 +95,10 @@ public:
    */
   ~modules_loader() {
     for (auto &plugin : this->plugins) {
-      // Closing loaded module.
-      dlclose(plugin.second);
+      if (plugin.second != nullptr && plugin.second->handle != nullptr) {
+        // Closing loaded module.
+        dlclose(plugin.second->handle);
+      }
     }
   }
 
@@ -77,14 +108,14 @@ public:
   modules_loader &operator=(modules_loader &&) = delete;
 
   template<typename symbol_t>
-  auto load(const char *symbol_name, std::function<void(symbol_t symbol, const std::string &module_name, const char *error)> onload) const -> void {
+  auto load(const char *symbol_name, std::function<void(symbol_t symbol, const mtc::zmap &module_settings, const char *error)> onload) const -> void {
     for (const auto &plugin : this->plugins) {
       // Getting a symbol by it name.
-      auto symbol = reinterpret_cast<symbol_t>(dlsym(plugin.second, symbol_name));
+      auto symbol = reinterpret_cast<symbol_t>(dlsym(plugin.second->handle, symbol_name));
 
       if (onload != nullptr) {
         // Raising ONLOAD event.
-        onload(reinterpret_cast<symbol_t>(symbol), plugin.first, dlerror());
+        onload(reinterpret_cast<symbol_t>(symbol), plugin.second->settings, dlerror());
       }
     }
   }

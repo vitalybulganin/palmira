@@ -6,9 +6,37 @@
 //-------------------------------------------------------------------------//
 namespace docapi {
 //-------------------------------------------------------------------------//
-  HttpServer::HttpServer(mtc::api<palmira::IService> srv, common::config cfg)
-    : config(std::move(cfg)), service(std::move(srv)),
-      pool(std::max(1U, config.worker_threads == 0 ? std::thread::hardware_concurrency() - 1 : config.worker_threads)) {
+  namespace {
+    std::uint16_t g_listen_port = 9200;
+
+    // Validates a configuration on valid.
+    auto validate_config(const mtc::zmap &settings) -> void {
+      if (settings.get_zmap("ssl", {}).get_int32("enabled", 0) != 0) {
+        const auto ssl = settings.get_zmap("ssl", {});
+        if (ssl.get_charstr("priv_key_file", "").empty()) {
+          throw (std::invalid_argument("ssl config file path is empty"));
+        }
+
+        if (ssl.get_charstr("cert_file", "").empty()) {
+          throw (std::invalid_argument("certificate file path is empty"));
+        }
+
+        if (ssl.get_charstr("dh_params_file", "").empty()) {
+          throw (std::invalid_argument("dh_params file path is empty"));
+        }
+      }
+    }
+  } // namespace
+//-------------------------------------------------------------------------//
+  HttpServer::HttpServer(mtc::api<palmira::IService> srv, mtc::zmap cfg)
+    : settings(std::move(cfg)), service(std::move(srv)),
+      pool(std::max(1U, settings.get_int32("workers", 1) == 0 ? std::thread::hardware_concurrency() - 1 : settings.get_int32("workers", 1))) {
+    if (this->settings.get_int32("listen_port", 0) > 0) {
+      g_listen_port = this->settings.get_int32("listen_port", g_listen_port);
+    }
+
+    // Validating a configuration parameters.
+    validate_config(this->settings);
   }
 
  HttpServer::~HttpServer() {
@@ -60,21 +88,28 @@ namespace docapi {
     this->loop = uWS::Loop::get();
 
     try {
-      if (this->config.ssl.enabled) {
+      const auto listen_host = this->settings.get_charstr("listen_address", "0.0.0.0");
+
+      if (this->settings.get_zmap("ssl", {}).get_int32("enabled", 0) != 0) {
+        const auto &ssl = this->settings.get_zmap("ssl", {});
         uWS::SSLApp app({
-          .key_file_name = this->config.ssl.priv_key_file.c_str(),
-          .cert_file_name = this->config.ssl.cert_file.c_str(),
-          .dh_params_file_name = this->config.ssl.dh_params_file.empty() ? nullptr : this->config.ssl.dh_params_file.c_str()
+          .key_file_name = ssl.get_charstr("priv_key_file", "").c_str(),
+          .cert_file_name = ssl.get_charstr("cert_file", "").c_str(),
+          .dh_params_file_name = ssl.get_charstr("dh_params_file", "").c_str()
         });
 
         // Registering routes.
         this->register_routes<true>(app);
 
         // Listening the server.
-        app.listen(this->config.listen_host, this->config.port, [this](auto *token) {
+        app.listen( listen_host, getListenPort(), [this](auto *token) {
           this->onlisten(token);
         });
 
+        std::fprintf(stdout, "Module [%s] listening on https://%s:%d\n",
+                     this->settings.get_charstr("name", "").c_str(),
+                     listen_host.c_str(),
+                     getListenPort());
         // Executing server.
         app.run();
       } else {
@@ -83,10 +118,14 @@ namespace docapi {
         this->register_routes<false>(app);
 
         // Listening the server.
-        app.listen(this->config.listen_host, this->config.port, [this](auto *token) {
+        app.listen(listen_host, getListenPort(), [this](auto *token) {
           this->onlisten(token);
         });
 
+        std::fprintf(stdout, "Module [%s] listening on http://%s:%d\n",
+                     this->settings.get_charstr("name", "").c_str(),
+                     listen_host.c_str(),
+                     getListenPort());
         // Executing server.
         app.run();
       }
@@ -105,6 +144,10 @@ namespace docapi {
       this->start_failed = token == nullptr;
     }
     this->cv.notify_all();
+  }
+//-------------------------------------------------------------------------//
+  auto getListenPort() -> std::uint16_t {
+    return g_listen_port;
   }
 //-------------------------------------------------------------------------//
 } // namespace docapi

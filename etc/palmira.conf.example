@@ -1,0 +1,17 @@
+{
+    "service": {
+        "index": {
+            "generic_name": "palmira",
+        },
+        "contents": "Mini"
+    },
+    "modules": {
+        "files": [
+            {
+                "name": "cmake-build-debug/lib/libdocapi-http.so",
+                "listen_port": 9200,
+                "workers": 2,
+            },
+        ]
+    }
+}
