@@ -36,6 +36,11 @@
 #include "../http/docreq.h"
 #include "../http/docres.h"
 //-------------------------------------------------------------------------//
+#include "../parsers/insert-parser.h"
+#include "../parsers/update-parser.h"
+#include "../parsers/remove-parser.h"
+#include "../parsers/search-parser.h"
+//-------------------------------------------------------------------------//
 namespace docapi {
 //-------------------------------------------------------------------------//
   struct async_response_state final {
@@ -70,16 +75,13 @@ namespace docapi {
     uWS::Loop *loop = nullptr;
     us_listen_socket_t *listen_socket = nullptr;
 
-    //!< Keeps a list of storage indexes.
-    std::unordered_map<std::string, storage_t> storages;
-
   public:
     /**
      * Constructor.
      * @param service [in] - A search service.
-     * @param ssettings [in] - A server configuration.
+     * @param settings [in] - A server configuration.
      */
-    explicit HttpServer(mtc::api<palmira::IService> service, mtc::zmap ssettings);
+    explicit HttpServer(mtc::api<palmira::IService> service, mtc::zmap settings);
 
     /**
      * Destructor.
@@ -99,7 +101,7 @@ namespace docapi {
     auto register_routes(uWS::TemplatedApp<SSL> &app) -> void;
 
     template<bool SSL, typename Response, typename Request>
-    auto onindex(Response *res, Request *req) -> void;
+    auto onpost(Response *res, Request *req) -> void;
 
     template<bool SSL, typename Response, typename Request>
     auto onput(Response *res, Request *req) -> void;
@@ -117,20 +119,20 @@ namespace docapi {
 //-------------------------------------------------------------------------//
   template <bool SSL>
   auto HttpServer::register_routes(uWS::TemplatedApp<SSL> &app) -> void {
+    app.post("/:index/_doc", [this](auto *res, auto *req) {
+      this->onpost<SSL>(res, req);
+    });
+
+    app.post("/:index/_create/:id", [this](auto *res, auto *req) {
+      this->onpost<SSL>(res, req);
+    });
+
     app.put("/:index/_doc/:id", [this](auto *res, auto *req) {
       this->onput<SSL>(res, req);
     });
 
-    app.post("/:index/_doc", [this](auto *res, auto *req) {
-      this->onindex<SSL>(res, req);
-    });
-
     app.put("/:index/_create/:id", [this](auto *res, auto *req) {
-      this->onindex<SSL>(res, req);
-    });
-
-    app.post("/:index/_create/:id", [this](auto *res, auto *req) {
-      this->onindex<SSL>(res, req);
+      this->onput<SSL>(res, req);
     });
 
     app.get("/:index/_doc/:id", [this](auto *res, auto *req) {
@@ -143,8 +145,9 @@ namespace docapi {
   }
 
   template<bool SSL, typename Response, typename Request>
-  auto HttpServer::onindex(Response *res, Request *req) -> void {
+  auto HttpServer::onpost(Response *res, Request *req) -> void {
     auto state = std::make_shared<async_response_state>();
+    const auto request_started = std::chrono::steady_clock::now();
 
     res->onAborted([state]() {
       state->aborted.store(true, std::memory_order_release);
@@ -159,7 +162,7 @@ namespace docapi {
     // Reserving resources.
     body->reserve(body_size);
 
-    res->onData([this, res, state, index, request_id, params, body, body_size](std::string_view chunk, bool last) mutable {
+    res->onData([this, res, state, index, request_id, params, body, body_size, started = request_started.time_since_epoch().count()](std::string_view chunk, bool last) mutable {
       const auto timeout = this->settings.get_int32("request_timeout", request_timeout);
 
       if (state->aborted.load(std::memory_order_acquire)) {
@@ -177,8 +180,23 @@ namespace docapi {
       }
 
       // Forwarding a request to search engine.
-      this->onsubmit(res, state, [service = this->service, index, request_id, body = std::move(*body), params, timeout]() mutable {
-        return service->Insert(http::make_index_request(index, request_id, std::move(body), params))->Wait(timeout);
+      this->onsubmit(res, state, [service = this->service, index, request_id, body = std::move(*body), params, timeout, started]() mutable {
+        // Making insert parser.
+        const auto parser = std::make_unique<docapi::parsers::insert_parser>();
+        // Parsing insert request.
+        auto args = parser->parse(std::string_view(body), mtc::zmap{
+          {"index",  index},
+          {"id",     request_id},
+          {"params", {}}, //<TODO> Adding query params support
+          {"started", started}
+        });
+
+        // Sending a document to search engine.
+        auto zresp = service->Insert(*args)->Wait(timeout);
+
+        // Adding a started marker time.
+        zresp.set_int64("started", started);
+        return zresp;
       });
     });
   }
@@ -220,7 +238,15 @@ namespace docapi {
 
       // Forwarding a request to search engine.
       this->onsubmit(res, state, [service = this->service, index, request_id, body = std::move(*body), params, timeout]() mutable {
-        return service->Update(http::make_index_request(index, request_id, std::move(body), params))->Wait(timeout);
+        // Making insert parser.
+        const auto parser = std::make_unique<docapi::parsers::insert_parser>();
+        // Parsing insert request.
+        auto args = parser->parse(std::string_view(body), mtc::zmap{
+          {"index",  index},
+          {"id",     request_id},
+          {"params", /*params*/{}}//<TODO> Adding query params support
+        });
+        return service->Update(*args)->Wait(timeout);
       });
     });
   }

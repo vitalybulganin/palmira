@@ -1,10 +1,7 @@
-{
-    "service": {
-        "index": {
-            "generic_name": "data/palmira",
-        },
-        "contents": "Mini"
-    },
+# Palmira server modules
+
+## Module configuration
+```
     "modules": {
         "files": [
             {
@@ -12,9 +9,8 @@
                 "file": "cmake-build-debug/lib/libdocapi-http.so",
                 "listen_port": 9200,
                 "workers": 2,
-                "max_body_size": "5M",
-                "request_timeout": "2s"
+                "max_body_size": "5M"
             },
         ]
     }
-}
+```

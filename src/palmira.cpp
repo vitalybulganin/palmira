@@ -14,7 +14,7 @@
 # include <functional>
 # include <thread>
 //-------------------------------------------------------------------------//
-#include "modules-loader.h"
+#include "../modules/common/modules-loader.h"
 #include "server.h"
 //-------------------------------------------------------------------------//
 using create_server_t = server_t(*)(service_t, mtc::config module_settings);
@@ -72,7 +72,7 @@ namespace {
   std::vector<server_t> create_server_modules(service_t service, const mtc::config &config) {
     std::vector<server_t> servers;
     uint8_t port_index = 0;
-    modules_loader loader(config);
+    palmira::modules::modules_loader loader(config);
     // Loading a module.
     loader.load<create_server_t>("createServer", [&](create_server_t on_create_server, const mtc::zmap &module_settings, const char *error) {
       if (error == nullptr) {

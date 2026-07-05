@@ -1,11 +1,12 @@
 #include "docres.h"
 //-------------------------------------------------------------------------//
 #include <string>
+#include <filesystem>
 //-------------------------------------------------------------------------//
 #include <App.h>
 //-------------------------------------------------------------------------//
-#include <assert.h>
-
+#include <common/errors.h>
+//-------------------------------------------------------------------------//
 #include "errors.h"
 //-------------------------------------------------------------------------//
 namespace docapi::http {
@@ -29,6 +30,17 @@ namespace docapi::http {
 
       return result;
     }
+
+    auto get_elapsed_ms(std::uint64_t started) -> std::uint64_t {
+      if (started > 0) {
+        auto diff_ticks = static_cast<double>(std::chrono::steady_clock::now().time_since_epoch().count() - started);
+        auto nanoseconds_per_tick = static_cast<double>(std::chrono::steady_clock::duration::period::num) / std::chrono::steady_clock::duration::period::den * 1'000'000'000;
+
+        return static_cast<std::uint64_t>((diff_ticks * nanoseconds_per_tick) / 1'000'000.0);
+      }
+
+      return 0;
+    }
 //-------------------------------------------------------------------------//
   }// namespace
 //-------------------------------------------------------------------------//
@@ -47,7 +59,7 @@ namespace docapi::http {
       return;
     }
 
-    ctx->response->writeStatus(status_to_string(response.status));
+    ctx->response->writeStatus(docapi::http::status_to_string(response.status));
     ctx->response->writeHeader("Content-Type", response.content_type.empty() ? "application/json" : response.content_type);
     ctx->response->writeHeader("Content-Length", std::to_string(response.body.size()));
     ctx->response->end(response.body);
@@ -79,7 +91,32 @@ namespace docapi::http {
   }
 //-------------------------------------------------------------------------//
   auto make_json_response(const mtc::zmap &zmap) -> service_response {
-    return {};
+    std::fprintf(stdout, "response: %s\n", mtc::to_string(zmap).c_str());
+
+    auto success = true;
+    const auto elapsed = get_elapsed_ms(zmap.get_int64("started", 0));
+    auto resp = service_response{
+      .status = 200,
+      .content_type = "application/json"
+    };
+
+    try {
+      // Checking response on errors,
+      palmira::modules::check_errors(zmap);
+      //<TODO> Adding checking response on error.
+    } catch (const palmira::modules::palmira_error &exc) {
+      std::fprintf(stderr, "Proceed request failed: (%d) %s\n", exc.code(), exc.what());
+
+      resp.status = 500;
+      success = false;
+    }
+    resp.body = R"({)";
+    resp.body += R"("took":)" + std::to_string(elapsed) + ",";
+    resp.body += R"("errors":)" + std::string(success ? "false" : "true") + ",";
+    resp.body += R"("items": [])";
+    resp.body += R"(})";
+
+    return resp;
   }
 //-------------------------------------------------------------------------//
   template

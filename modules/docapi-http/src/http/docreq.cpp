@@ -131,53 +131,5 @@ namespace docapi::http {
     }
     return default_value;
   }
-
-  auto make_index_request(std::string index, std::string id, std::string body, const query_params_t &params)  -> palmira::InsertArgs {
-    palmira::InsertArgs args;
-
-/*<TODO>
-    args.index = std::move(index);
-    args.id = std::move(id);
-    args.body = std::move(body);
-
-    if (const auto it = params.find("routing"); it != params.end()) {
-      args.routing = it->second;
-    }
-
-    if (const auto it = params.find("refresh"); it != params.end()) {
-      args.refresh = it->second;
-    }
-
-    if (const auto it = params.find("pipeline"); it != params.end()) {
-      args.pipeline = it->second;
-    }
-*/
-
-    return args;
-  }
-
-  auto make_iupdate_request(std::string index, std::string id, std::string body, const query_params_t &params)  -> palmira::UpdateArgs {
-    palmira::UpdateArgs args;
-
-/*<TODO>
-    args.index = std::move(index);
-    args.id = std::move(id);
-    args.body = std::move(body);
-
-    if (const auto it = params.find("routing"); it != params.end()) {
-      args.routing = it->second;
-    }
-
-    if (const auto it = params.find("refresh"); it != params.end()) {
-      args.refresh = it->second;
-    }
-
-    if (const auto it = params.find("pipeline"); it != params.end()) {
-      args.pipeline = it->second;
-    }
-*/
-
-    return args;
-  }
 //-------------------------------------------------------------------------//
 } // namespace docapi::http

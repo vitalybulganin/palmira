@@ -1,8 +1,8 @@
 /*!==========================================================================
 * \file
-* - Program:       docapi-http
-* - File:          errors.h
-* - Created:       06/23/2026
+* - Program:       palmira
+* - File:          module-utils.h
+* - Created:       06/30/2026
 * - Author:        Vitaly Bulganin
 * - Description:
 * - Comments:
@@ -14,29 +14,27 @@
 ===========================================================================*/
 #pragma once
 //-------------------------------------------------------------------------//
-#ifndef __HTTP_ERRORS_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
-#define __HTTP_ERRORS_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
+#ifndef __MODULE_UTILS_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
+#define __MODULE_UTILS_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
 //-------------------------------------------------------------------------//
 #include <string>
-#include <string_view>
 //-------------------------------------------------------------------------//
-namespace docapi::http {
+namespace palmira::modules {
 //-------------------------------------------------------------------------//
   /**
-   * Gets status as a string.
-   * @param status [in] - A status code.
-   * @return A status as a string.
+   * Parses a size from string.
+   * @param size [in] - A size as a string.
+   * @return A number of size.
    */
-  auto status_to_string(int status) -> std::string_view;
+  auto parse_size(const std::string &size) -> size_t;
 
   /**
-   * Makes a JSON error response.
-   * @param type [in] - Error type.
-   * @param reason [in] - Error reason.
-   * @return Error JSON string.
+   * Parses a timeout as a string.
+   * @param timeout [in] - A timeout as a string.
+   * @return A number of seconds.
    */
-  auto make_error_json(std::string type, std::string reason) -> std::string;
+  auto parse_timeout(const std::string &timeout) -> size_t;
 //-------------------------------------------------------------------------//
-} // namespace docapi::http
+} // namespace palmira::modules
 //-------------------------------------------------------------------------//
-#endif // __HTTP_ERRORS_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
+#endif // __MODULE_UTILS_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__

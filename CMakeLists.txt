@@ -169,6 +169,7 @@ target_link_libraries(palmira
 	structo
 	DeliriX
 	${MoonyCode_LIB}
+	modules-common
 	mtc
 	tinyxml2
 	minizip

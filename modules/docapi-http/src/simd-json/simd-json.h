@@ -83,6 +83,7 @@ namespace docapi::json {
    * Validates a document on valid.
    * @param parser [in] - A parser.
    * @param body [in] - A document.
+   * @throw common::json_parse_error - JSON document is invalid.
    */
   auto validate_json_document(simdjson::ondemand::parser &parser, std::string_view body) -> void;
 //-------------------------------------------------------------------------//

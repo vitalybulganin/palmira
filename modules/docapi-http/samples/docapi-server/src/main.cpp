@@ -15,12 +15,12 @@
 //-------------------------------------------------------------------------//
 #include <server.h>
 //-------------------------------------------------------------------------//
-#include "../../../../include/modules-loader.h"
+#include "../../../../common/modules-loader.h"
 //-------------------------------------------------------------------------//
 namespace {
 //-------------------------------------------------------------------------//
   std::atomic_bool g_stop_requested = false;
-  using create_server_t = server_t(*)(service_t, docapi::common::config);
+  using create_server_t = server_t(*)(service_t, mtc::zmap config);
 
   void SignalHandler(int signal_number) {
     /*
@@ -54,9 +54,9 @@ namespace {
       program_name << " ./libdocapi-http.so 9200\n";
   }
 
-  std::vector<server_t> create_server_modules(std::string_view module_path, const docapi::common::config &config) {
+  std::vector<server_t> create_server_modules(std::string_view module_path, const mtc::zmap &config) {
     std::vector<server_t> servers;
-    modules_loader loader(module_path.data());
+    modules::modules_loader loader(module_path.data());
     // Loading a module.
     loader.load<create_server_t>("createServer", [&](create_server_t on_create_server, const std::string &module_name, const char *error) {
       if (error == nullptr) {

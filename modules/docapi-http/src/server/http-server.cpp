@@ -89,6 +89,8 @@ namespace docapi {
 
     try {
       const auto listen_host = this->settings.get_charstr("listen_address", "0.0.0.0");
+      const auto module_file = this->settings.get_charstr("file", "");
+      const auto module_name = this->settings.get_charstr("name", module_file);
 
       if (this->settings.get_zmap("ssl", {}).get_int32("enabled", 0) != 0) {
         const auto &ssl = this->settings.get_zmap("ssl", {});
@@ -107,7 +109,7 @@ namespace docapi {
         });
 
         std::fprintf(stdout, "Module [%s] listening on https://%s:%d\n",
-                     this->settings.get_charstr("name", "").c_str(),
+                     module_name.c_str(),
                      listen_host.c_str(),
                      getListenPort());
         // Executing server.
@@ -123,7 +125,7 @@ namespace docapi {
         });
 
         std::fprintf(stdout, "Module [%s] listening on http://%s:%d\n",
-                     this->settings.get_charstr("name", "").c_str(),
+                     module_name.c_str(),
                      listen_host.c_str(),
                      getListenPort());
         // Executing server.

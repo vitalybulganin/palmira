@@ -21,7 +21,6 @@
 //-------------------------------------------------------------------------//
 #include "server.hpp"
 #include "service.hpp"
-#include "config.h"
 //-------------------------------------------------------------------------//
 using server_t = mtc::api<palmira::IServer>;
 using service_t = mtc::api<palmira::IService>;
