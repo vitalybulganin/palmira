@@ -1,8 +1,9 @@
 #include "../module-utils.h"
 //-------------------------------------------------------------------------//
 #include <chrono>
-#include <cstdint>
 #include <stdexcept>
+#include <random>
+#include <thread>
 //-------------------------------------------------------------------------//
 namespace palmira::modules {
 //-------------------------------------------------------------------------//
@@ -136,6 +137,30 @@ namespace palmira::modules {
 
   auto parse_timeout(const std::string &timeout) -> size_t {
     return static_cast<size_t>(as_duration(std::chrono::milliseconds(), timeout.c_str()).count());
+  }
+
+  auto make_uid(std::uint8_t size /*= 16*/) -> std::string {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, 35);
+
+    const char charset[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+    std::string id;
+    id.reserve(2 * size);
+
+    auto time = std::chrono::steady_clock::now().time_since_epoch().count();
+    std::string time_str = std::to_string(time);
+    for (char c : time_str) {
+      id.push_back(charset[(c - '0') % 36]);
+    }
+
+    // 8 случайных символов
+    for (auto i = 0; i < size; ++i) {
+      id.push_back(charset[dis(gen)]);
+    }
+
+    return id;
   }
 //-------------------------------------------------------------------------//
 } // namespace palmira::modules

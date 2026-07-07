@@ -52,8 +52,6 @@ namespace docapi::http {
     std::string body;
   };
 //-------------------------------------------------------------------------//
-  auto make_json_response(const mtc::zmap &zmap) -> service_response;
-//-------------------------------------------------------------------------//
   template<bool SSL>
   void send_json_response(response_context<SSL> *ctx, const service_response &response);
 

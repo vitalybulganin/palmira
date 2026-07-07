@@ -14,8 +14,8 @@
 ===========================================================================*/
 #pragma once
 //-------------------------------------------------------------------------//
-#ifndef __INDEX_PARSER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
-#define __INDEX_PARSER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
+#ifndef __SEARCH_PARSER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
+#define __SEARCH_PARSER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
 //-------------------------------------------------------------------------//
 #include <string_view>
 //-------------------------------------------------------------------------//
@@ -29,7 +29,7 @@ namespace docapi::parsers {
 //-------------------------------------------------------------------------//
   class search_parser : public common::parser<palmira::SearchArgs> {
     //!< Keeps JSON parser, which is not thread-safe.
-    simdjson::ondemand::parser parser;
+    mutable simdjson::ondemand::parser parser;
 
   public:
     /**
@@ -43,7 +43,7 @@ namespace docapi::parsers {
      * Validates a body on valid.
      * @param body [in] - A document body.
      */
-    virtual auto validate(std::string_view body) -> void override;
+    virtual auto validate(std::string_view body) const -> void override;
 
     /**
      * Parses a document.
@@ -51,10 +51,10 @@ namespace docapi::parsers {
      * @param opts [in] - Options.
      * @return A parsed object.
      */
-    virtual auto parse(std::string_view body, const mtc::zmap &opts) -> std::unique_ptr<value_type> override;
+    virtual auto parse(std::string_view body, const mtc::zmap &opts) const -> std::unique_ptr<value_type> override;
   };
 //-------------------------------------------------------------------------//
 } // namespace docapi::parsers
 //-------------------------------------------------------------------------//
-#endif // __INDEX_PARSER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
+#endif // __SEARCH_PARSER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
 

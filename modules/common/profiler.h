@@ -1,6 +1,6 @@
 /*!==========================================================================
 * \file
-* - Program:       palmira
+* - Program:       modules-common
 * - File:          profiler.h
 * - Created:       07/05/2026
 * - Author:        Vitaly Bulganin

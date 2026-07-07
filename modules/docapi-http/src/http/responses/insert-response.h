@@ -1,8 +1,8 @@
 /*!==========================================================================
 * \file
 * - Program:       docapi-http
-* - File:          parser.h
-* - Created:       06/24/2026
+* - File:          insert-response.h
+* - Created:       07/04/2026
 * - Author:        Vitaly Bulganin
 * - Description:
 * - Comments:
@@ -14,40 +14,38 @@
 ===========================================================================*/
 #pragma once
 //-------------------------------------------------------------------------//
-#ifndef __PARSER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
-#define __PARSER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
+#ifndef __INSERT_RESPONSE_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
+#define __INSERT_RESPONSE_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
 //-------------------------------------------------------------------------//
-#include <string_view>
-#include <memory>
+#include <common/responsible.h>
 //-------------------------------------------------------------------------//
-#include <mtc/zmap.h>
+namespace docapi::http {
 //-------------------------------------------------------------------------//
-namespace docapi::common {
+  class docres_builder;
 //-------------------------------------------------------------------------//
-  template<typename parse_object_t>
-  struct parser {
-    using value_type = parse_object_t;
+  class insert_response : public palmira::modules::responsible {
+    friend class docres_builder;
 
+  public:
     /**
      * Destructor.
      */
-    virtual ~parser() = default;
+    virtual ~insert_response() override = default;
 
+    // Override methods
+  public:
     /**
-     * Validates a body on valid.
-     * @param body [in] - A document body.
+     * Makes a response.
+     * @param resp [in] - A response.
+     * @return A response as a string.
      */
-    virtual auto validate(std::string_view body) const -> void = 0;
+    virtual auto make_reply(const mtc::zmap &resp) const -> std::string override;
 
-    /**
-     * Parses a document.
-     * @param body [in] - A document body.
-     * @param opts [in] - Options.
-     * @return A parsed object.
-     */
-    virtual auto parse(std::string_view body, const mtc::zmap &opts) const -> std::unique_ptr<parse_object_t> = 0;
+  protected:
+    //!< Constructor.
+    insert_response() = default;
   };
 //-------------------------------------------------------------------------//
-} // namespace docapi::common
+} // namespace docapi::http
 //-------------------------------------------------------------------------//
-#endif // __PARSER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
+#endif // __INSERT_RESPONSE_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__

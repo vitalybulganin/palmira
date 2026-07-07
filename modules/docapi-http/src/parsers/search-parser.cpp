@@ -7,11 +7,10 @@
 //-------------------------------------------------------------------------//
 namespace docapi::parsers {
   //-------------------------------------------------------------------------//
-  auto search_parser::validate(std::string_view body) -> void {
-    json::validate_json_document(this->parser, body);
+  auto search_parser::validate(std::string_view body) const -> void {
   }
 
-  auto search_parser::parse(std::string_view body, const mtc::zmap &opts) -> std::unique_ptr<value_type> {
+  auto search_parser::parse(std::string_view body, const mtc::zmap &opts) const -> std::unique_ptr<value_type> {
     simdjson::padded_string padded_body(body);
     simdjson::ondemand::document document;
     simdjson::ondemand::object root;
@@ -74,11 +73,11 @@ namespace docapi::parsers {
           }
           const auto doc = json::get_doc_item(doc_object, default_index);
 
-          search->query.get_array_zmap()->push_back(mtc::zmap {
-            {"index",   doc.index},
-            {"id",      doc.id},
-            {"routing", doc.routing},
-            {"routing", doc.options.as_zval()},
+          search->query.get_array_zmap()->push_back(mtc::zmap{
+            {"_index",   doc.index},
+            {"_id",      doc.id},
+            {"_routing", doc.routing},
+            {"_options", doc.options.as_zval()},
           });
         }
       } else if (key == "ids") {

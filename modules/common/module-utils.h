@@ -1,6 +1,6 @@
 /*!==========================================================================
 * \file
-* - Program:       palmira
+* - Program:       modules-common
 * - File:          module-utils.h
 * - Created:       06/30/2026
 * - Author:        Vitaly Bulganin
@@ -18,6 +18,7 @@
 #define __MODULE_UTILS_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
 //-------------------------------------------------------------------------//
 #include <string>
+#include <cstdint>
 //-------------------------------------------------------------------------//
 namespace palmira::modules {
 //-------------------------------------------------------------------------//
@@ -34,6 +35,13 @@ namespace palmira::modules {
    * @return A number of seconds.
    */
   auto parse_timeout(const std::string &timeout) -> size_t;
+
+  /**
+   * Makes unique id.
+   * @param size [in] - A size of unique id.
+   * @return UID.
+   */
+  auto make_uid(std::uint8_t size = 16) -> std::string;
 //-------------------------------------------------------------------------//
 } // namespace palmira::modules
 //-------------------------------------------------------------------------//

@@ -41,7 +41,7 @@ namespace docapi::parsers {
      * Validates a body on valid.
      * @param body [in] - A document body.
      */
-    virtual auto validate(std::string_view body) -> void override;
+    virtual auto validate(std::string_view body) const -> void override;
 
     /**
      * Parses a document.
@@ -49,7 +49,7 @@ namespace docapi::parsers {
      * @param opts [in] - Options.
      * @return A parsed object.
      */
-    virtual auto parse(std::string_view body, const mtc::zmap &opts) -> std::unique_ptr<value_type> override;
+    virtual auto parse(std::string_view body, const mtc::zmap &opts) const -> std::unique_ptr<value_type> override;
   };
 //-------------------------------------------------------------------------//
 } // namespace docapi::parsers

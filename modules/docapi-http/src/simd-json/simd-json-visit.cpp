@@ -12,15 +12,17 @@ namespace docapi::json {
     buffer << "name="; buffer.write(this->name.data(), this->name.size()); buffer << ", ";
 
     if (this->type == json_value_types::string) {
-      buffer << "value="; buffer.write(this->string_value.data(), this->string_value.size()); buffer << ", ";
+      buffer << "value="; buffer.write(this->value.string_value.data(), this->value.string_value.size()); buffer << ", ";
     } else if (this->type == json_value_types::boolean) {
-      buffer << "value=" << std::boolalpha << this->bool_value << ", ";
+      buffer << "value=" << std::boolalpha << this->value.bool_value << ", ";
     } else if (this->type == json_value_types::int64 ) {
-      buffer << "value=" << this->int64_value << ", ";
+      buffer << "value=" << this->value.int64_value << ", ";
     } else if (this->type == json_value_types::uint64) {
-      buffer << "value=" << this->uint64_value << ", ";
+      buffer << "value=" << this->value.uint64_value << ", ";
     } else if (this->type == json_value_types::double_value) {
-      buffer << "value=" << this->double_value << ", ";
+      buffer << "value=" << this->value.double_value << ", ";
+    } else if (this->type == json_value_types::datetime) {
+      buffer << "value=" << this->value.datetime_value << ", ";
     }
     buffer << "type="; buffer.write(value_type.data(), value_type.size());
     return buffer.str();
@@ -37,17 +39,10 @@ namespace docapi::json {
       case json_value_types::uint64: { return "uint64"; }
       case json_value_types::double_value: { return "double"; }
       case json_value_types::boolean: { return "boolean"; }
+      case json_value_types::datetime: { return "datetime"; }
       case json_value_types::null_value: { return "null"; }
       }
     return "unknown";
-  }
-//-------------------------------------------------------------------------//
-  void VisitJson(std::string_view json, const json_visit_callback_t &callback) {
-    VisitJsonFast(json, callback);
-  }
-
-  void VisitNdjson(std::string_view ndjson, const json_visit_callback_t &callback) {
-    VisitNdjsonFast(ndjson, callback);
   }
 //-------------------------------------------------------------------------//
 } // namespace docapi::json

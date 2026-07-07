@@ -1,6 +1,6 @@
 /*!==========================================================================
 * \file
-* - Program:       palmira
+* - Program:       modules-common
 * - File:          modules-loader.h
 * - Created:       06/26/2026
 * - Author:        Vitaly Bulganin

@@ -28,9 +28,11 @@
 //-------------------------------------------------------------------------//
 #include <structo/contents.hpp>
 //-------------------------------------------------------------------------//
+#include <common/responsible.h>
+//-------------------------------------------------------------------------//
 #include "../../../include/server.h"
 //-------------------------------------------------------------------------//
-#include "../common/thread-pool.h"
+#include "async-executer.h"
 //-------------------------------------------------------------------------//
 #include "../http/errors.h"
 #include "../http/docreq.h"
@@ -40,6 +42,8 @@
 #include "../parsers/update-parser.h"
 #include "../parsers/remove-parser.h"
 #include "../parsers/search-parser.h"
+//-------------------------------------------------------------------------//
+#include "../http/docres-builder.h"
 //-------------------------------------------------------------------------//
 namespace docapi {
 //-------------------------------------------------------------------------//
@@ -55,6 +59,65 @@ namespace docapi {
   class HttpServer : public palmira::IServer {
     using storage_t = mtc::api<structo::IStorage>;
 
+    template<typename parser_t, typename responser_t>
+    struct executer_context_data final {
+      //!< Keeps a parser.
+      const parser_t parser = {};
+
+      //!< Keeps a responser.
+      const responser_t responser = {};
+
+      //!< Constructor.
+      explicit executer_context_data(const parser_t parser_, const responser_t resp)
+        : parser(parser_), responser(resp) {
+      }
+    };
+
+    struct executer_context final {
+      //!< Keeps a type of executer.
+      const executer_types type;
+
+      //!< Keeps inserter.
+      const executer_context_data<const docapi::parsers::insert_parser *, const palmira::modules::responsible *> insert;
+
+      //!< Keeps updater.
+      const executer_context_data<const docapi::parsers::update_parser *, const palmira::modules::responsible *> update;
+
+      //!< Keeps remover.
+      const executer_context_data<const docapi::parsers::remove_parser *, const palmira::modules::responsible *> remove;
+
+      //!< Keeps searcher.
+      const executer_context_data<const docapi::parsers::search_parser *, const palmira::modules::responsible *> search;
+
+      /**
+       * Constructor.
+       * @param parser [in] - Insert parser.
+       * @param resp [in] - A responser.
+       */
+      explicit executer_context(const docapi::parsers::insert_parser *parser, const palmira::modules::responsible *resp);
+
+      /**
+       * Constructor.
+       * @param parser [in] - Update parser.
+       * @param resp [in] - A responser.
+       */
+      explicit executer_context(const docapi::parsers::update_parser *parser, const palmira::modules::responsible *resp);
+
+      /**
+       * Constructor.
+       * @param parser [in] - Remove parser.
+       * @param resp [in] - A responser.
+       */
+      explicit executer_context(const docapi::parsers::remove_parser *parser, const palmira::modules::responsible *resp);
+
+      /**
+       * Constructor.
+       * @param parser [in] - Search parser.
+       * @param resp [in] - A responser.
+       */
+      explicit executer_context(const docapi::parsers::search_parser *parser, const palmira::modules::responsible *resp);
+    };
+
     //!< Keeps a server config.
     const mtc::zmap settings;
 
@@ -62,7 +125,7 @@ namespace docapi {
     service_t service;
 
     //!< Keeps a pool of workers.
-    common::thread_pool pool;
+    async_executer<executer_context> executer;
 
     std::thread thread;
     std::atomic_bool started{false};
@@ -109,8 +172,10 @@ namespace docapi {
     template <bool SSL, typename Response, typename Request>
     auto onget(Response *res, Request *req) -> void;
 
+/*
     template<typename Response, typename Fn>
     auto onsubmit(Response *res, const std::shared_ptr<async_response_state>& state, Fn &&fn) -> void;
+*/
 
   private:
     auto onloop() -> void;
@@ -135,6 +200,7 @@ namespace docapi {
       this->onput<SSL>(res, req);
     });
 
+    // Searching.
     app.get("/:index/_doc/:id", [this](auto *res, auto *req) {
       this->onget<SSL>(res, req);
     });
@@ -142,10 +208,94 @@ namespace docapi {
     app.get("/:index/_source/:id", [this](auto *res, auto *req) {
       this->onget<SSL>(res, req);
     });
+
+    app.get("/:index/_search", [this](auto *res, auto *req) {
+      this->onget<SSL>(res, req);
+    });
   }
 
   template<bool SSL, typename Response, typename Request>
   auto HttpServer::onpost(Response *res, Request *req) -> void {
+    auto state = std::make_shared<async_response_state>();
+    auto resp_ctx = std::make_shared<http::response_context<SSL>>(res);
+    const auto request_started = std::chrono::steady_clock::now();
+
+    const auto index = std::string(req->getParameter(0));
+    const auto request_id = req->getParameter(1).empty() ? std::string{} : std::string(req->getParameter(1));
+    const auto params = http::parse_query(req->getQuery());
+    const auto body_size = this->settings.get_int64("max_body_size", max_body_size);
+
+    auto body = std::make_shared<std::string>();
+
+    // Reserving resources.
+    body->reserve(body_size);
+
+    res->onAborted([state]() {
+      state->aborted.store(true, std::memory_order_release);
+    });
+
+    res->onData([this, resp_ctx, state, index, request_id, params, body, body_size, started = request_started.time_since_epoch().count()](std::string_view chunk, bool last) mutable {
+      const auto timeout = this->settings.get_int32("request_timeout", request_timeout);
+
+      if (state->aborted.load(std::memory_order_acquire)) {
+        return;
+      }
+      if (body->size() + chunk.size() > body_size) {
+        state->aborted.store(true, std::memory_order_release);
+
+        // Replying error message.
+        http::send_error_response(resp_ctx.get(), 413, "payload_too_large", "request body is too large");
+        return;
+      }
+      body->append(chunk.data(), chunk.size());
+
+      if (not last) {
+        return;
+      }
+
+      // Forwarding a request to search engine.
+      this->executer.enqueue(executer_types::insert, [loop = this->loop, service = this->service, resp_ctx, index, request_id, body = std::move(*body), params, timeout, &state, started](const executer_context &ctx) mutable -> void {
+        try {
+          // Parsing insert request.
+          auto args = ctx.insert.parser->parse(std::string_view(body), mtc::zmap{
+            {"_index",      index},
+            {"_request_id", request_id},
+            {"_started", started},
+            {"_method",   "insert"},
+            {"_params", {}} //<TODO> Adding query params support
+          });
+
+          // Sending a document to search engine.
+          service->Insert(*args, [&ctx, &loop, resp_ctx, &state](const mtc::zmap &resp) {
+            auto reply = http::service_response{
+              .status = 200,
+              .content_type = "application/json; charset=utf-8",
+              .body = ""
+            };
+
+            // Making a response.
+            reply.body = ctx.insert.responser->make_reply(resp);
+
+            loop->defer([resp_ctx, state, reply = std::move(reply)]() mutable {
+              if (state->aborted.load(std::memory_order_acquire)) {
+                return;
+              }
+
+              // Replying a response to client.
+              http::send_json_response(resp_ctx.get(), reply);
+            });
+          });
+        } catch (const std::exception &exc) {
+          http::send_error_response(resp_ctx.get(), 500, "internal_server_error", exc.what());
+        } catch (...) {
+          http::send_error_response(resp_ctx.get(), 500, "internal_server_error", "unknown");
+        }
+      });
+    });
+  }
+
+  template<bool SSL, typename Response, typename Request>
+  auto HttpServer::onput(Response *res, Request *req) -> void {
     auto state = std::make_shared<async_response_state>();
     const auto request_started = std::chrono::steady_clock::now();
 
@@ -162,63 +312,7 @@ namespace docapi {
     // Reserving resources.
     body->reserve(body_size);
 
-    res->onData([this, res, state, index, request_id, params, body, body_size, started = request_started.time_since_epoch().count()](std::string_view chunk, bool last) mutable {
-      const auto timeout = this->settings.get_int32("request_timeout", request_timeout);
-
-      if (state->aborted.load(std::memory_order_acquire)) {
-        return;
-      }
-      if (body->size() + chunk.size() > body_size) {
-        state->aborted.store(true, std::memory_order_release);
-        res->writeStatus("413 Payload Too Large")->end(http::make_error_json("payload_too_large", "request body is too large"));
-        return;
-      }
-      body->append(chunk.data(), chunk.size());
-
-      if (not last) {
-        return;
-      }
-
-      // Forwarding a request to search engine.
-      this->onsubmit(res, state, [service = this->service, index, request_id, body = std::move(*body), params, timeout, started]() mutable {
-        // Making insert parser.
-        const auto parser = std::make_unique<docapi::parsers::insert_parser>();
-        // Parsing insert request.
-        auto args = parser->parse(std::string_view(body), mtc::zmap{
-          {"index",  index},
-          {"id",     request_id},
-          {"params", {}}, //<TODO> Adding query params support
-          {"started", started}
-        });
-
-        // Sending a document to search engine.
-        auto zresp = service->Insert(*args)->Wait(timeout);
-
-        // Adding a started marker time.
-        zresp.set_int64("started", started);
-        return zresp;
-      });
-    });
-  }
-
-  template<bool SSL, typename Response, typename Request>
-  auto HttpServer::onput(Response *res, Request *req) -> void {
-    auto state = std::make_shared<async_response_state>();
-
-    res->onAborted([state]() {
-      state->aborted.store(true, std::memory_order_release);
-    });
-
-    const std::string index(req->getParameter(0));
-    const std::string request_id = req->getParameter(1).empty() ? std::string{} : std::string(req->getParameter(1));
-    const auto params = http::parse_query(req->getQuery());
-    const auto body_size = this->settings.get_int64("max_body_size", max_body_size);
-
-    auto body = std::make_shared<std::string>();
-    // Reserving resources.
-    body->reserve(body_size);
-
-    res->onData([this, res, state, index, request_id, params, body, body_size](std::string_view chunk, bool last) mutable {
+    res->onData([this, res, state, index, request_id, params, started = request_started.time_since_epoch().count(), body, body_size](std::string_view chunk, bool last) mutable {
       const auto timeout = this->settings.get_int32("request_timeout", request_timeout);
 
       if (state->aborted.load(std::memory_order_acquire)) {
@@ -237,101 +331,131 @@ namespace docapi {
       }
 
       // Forwarding a request to search engine.
-      this->onsubmit(res, state, [service = this->service, index, request_id, body = std::move(*body), params, timeout]() mutable {
-        // Making insert parser.
-        const auto parser = std::make_unique<docapi::parsers::insert_parser>();
-        // Parsing insert request.
-        auto args = parser->parse(std::string_view(body), mtc::zmap{
-          {"index",  index},
-          {"id",     request_id},
-          {"params", /*params*/{}}//<TODO> Adding query params support
+      this->executer.enqueue(executer_types::insert, [loop = this->loop, service = this->service, res, index, request_id, body = std::move(*body), params, timeout, state, started](const executer_context &ctx) mutable -> void {
+        auto reply = http::service_response{
+          .status = 200,
+          .content_type = "application/json; charset=utf-8",
+          .body = ""
+        };
+
+        try {
+          // Parsing insert request.
+          auto args = ctx.insert.parser->parse(std::string_view(body), mtc::zmap{
+            {"_index",      index},
+            {"_request_id", request_id},
+            {"_started", started},
+            {"_method",   "insert"},
+            {"_params", {}} //<TODO> Adding query params support
+          });
+
+          // Sending a document to search engine.
+          auto resp = service->Insert(*args)->Wait(timeout);
+
+          // Making a response.
+          reply.body = ctx.insert.responser->make_reply(resp);
+        } catch (const std::exception &exc) {
+          reply.status = 500;
+          reply.body = http::make_error_json("internal_error", exc.what());
+        } catch (...) {
+          reply.status = 500;
+          reply.body = http::make_error_json("internal_error", "unknown error");
+        }
+
+        loop->defer([res, state, reply = std::move(reply)]() mutable {
+          if (state->aborted.load(std::memory_order_acquire)) {
+            return;
+          }
+
+          res->writeStatus(http::status_to_string(reply.status))->writeHeader("Content-Type", reply.content_type)->end(reply.body);
         });
-        return service->Update(*args)->Wait(timeout);
       });
     });
   }
 
   template<bool SSL, typename Response, typename Request>
   auto HttpServer::onget(Response *res, Request *req) -> void {
-    auto ctx = std::make_shared<http::response_context<SSL>>(res);
+    auto state = std::make_shared<async_response_state>();
+    auto resp_ctx = std::make_shared<http::response_context<SSL>>(res);
+
     const auto params = http::parse_query(req->getQuery());
     const auto routing = http::get_query_param(params, "routing");
-    const http::document_get_item doc{
-      .index = std::string(req->getParameter(0)),
-      .id = std::string(req->getParameter(1)),
-      .routing = routing.has_value() ? routing.value() : "",
-      .options = http::parse_get_options(params)
-    };
+    const auto index = std::string(req->getParameter(0));
+    const auto request_id = std::string(not req->getParameter(1).empty() ? req->getParameter(1) : "");
+    const auto body_size = this->settings.get_int64("max_body_size", max_body_size);
+    const auto request_started = std::chrono::steady_clock::now();
 
-    res->onAborted([ctx]() {
-      ctx->aborted.store(true, std::memory_order_release);
+    res->onAborted([resp_ctx]() {
+      resp_ctx->aborted.store(true, std::memory_order_release);
+    });
+    auto body = std::make_shared<std::string>();
+
+    // Reserving resources.
+    body->reserve(body_size);
+
+    res->onData([this, resp_ctx, state, body, body_size](std::string_view chunk, bool last) mutable {
+      const auto timeout = this->settings.get_int32("request_timeout", request_timeout);
+
+      if (state->aborted.load(std::memory_order_acquire)) {
+        return;
+      }
+      if (body->size() + chunk.size() > body_size) {
+        state->aborted.store(true, std::memory_order_release);
+
+        // Replying error message.
+        http::send_error_response(resp_ctx.get(), 413, "payload_too_large", "request body is too large");
+        return;
+      }
+      body->append(chunk.data(), chunk.size());
+
+      if (not last) {
+        return;
+      }
     });
 
-    /*<!!!>
-     * uWebSockets response живёт только в родном event-loop потоке.
-     * Тяжёлая работа уходит в ThreadPool, а ответ возвращается через loop->defer().
-     */
-    this->pool.enqueue([service = this->service, ctx, doc, params, loop = uWS::Loop::get()]() mutable {
+    //<!!!> uWebSockets response lives in original event-loop inside.
+    this->executer.enqueue(executer_types::search, [service = this->service, resp_ctx, index, request_id, params, routing, body = std::move(*body), started = request_started.time_since_epoch().count(), state, loop = uWS::Loop::get()](const executer_context &ctx) mutable {
       try {
-        palmira::SearchArgs search;
-
         if (service == nullptr) {
           throw (std::invalid_argument("Search engine not created"));
         }
+
+        // Parsing insert request.
+        auto args = ctx.search.parser->parse(std::string_view(body), mtc::zmap{
+          {"_index",      index},
+          {"_request_id", request_id},
+          {"_routing",  routing.has_value() ? routing.value() : ""},
+          {"_options",  /*params*/{}}, //<TODO> Adding query params support
+          {"_started",    started}
+        });
+
         // Forwarding a search request into search engine.
-        service->Search(search, [ctx, loop](const mtc::zmap &resp) {
-          http::service_response reply;
+        service->Search(*args, [resp_ctx, ctx, state, loop](const mtc::zmap &resp) {
+          auto reply = http::service_response{
+            .status = 200,
+            .content_type = "application/json; charset=utf-8",
+            .body = ""
+          };
 
-          // Converting a search response into reply.
+          // Making a response.
+          reply.body = ctx.search.responser->make_reply(resp);
 
-          // Replying a response to client.
-          loop->defer([ctx, reply = std::move(reply)]() mutable {
-            if (ctx->aborted.load(std::memory_order_acquire)) {
+          loop->defer([resp_ctx, state, reply = std::move(reply)]() mutable {
+            if (state->aborted.load(std::memory_order_acquire)) {
               return;
             }
 
-            // Replying to a response.
-            http::send_json_response(ctx.get(), reply);
+            // Replying a response to client.
+            http::send_json_response(resp_ctx.get(), reply);
           });
         });
       } catch (const std::exception &exc) {
         // Replying to error response.
-        http::send_error_response(ctx.get(), 500, "internal_server_error", exc.what());
+        http::send_error_response(resp_ctx.get(), 500, "internal_server_error", exc.what());
       } catch (...) {
         // Replying to error response.
-        http::send_error_response(ctx.get(), 500, "internal_server_error", "unknown");
+        http::send_error_response(resp_ctx.get(), 500, "internal_server_error", "unknown");
       }
     });
-  }
-
-  template<typename Response, typename Fn>
-  auto HttpServer::onsubmit(Response *res, const std::shared_ptr<async_response_state> &state, Fn &&fn) -> void {
-    const bool posted = this->pool.enqueue([loop = this->loop, res, state, fn = std::forward<Fn>(fn)]() mutable {
-      auto reply = http::service_response();
-
-      try {
-        // Making a response from zmap
-        reply = http::make_json_response(fn());
-      } catch (const std::exception &exc) {
-        reply.status = 500;
-        reply.body = http::make_error_json("internal_error", exc.what());
-      } catch (...) {
-        reply.status = 500;
-        reply.body = http::make_error_json("internal_error", "unknown error");
-      }
-
-      loop->defer([res, state, reply = std::move(reply)]() mutable {
-        if (state->aborted.load(std::memory_order_acquire)) {
-          return;
-        }
-
-        res->writeStatus(http::status_to_string(reply.status))->writeHeader("Content-Type", reply.content_type)->end(reply.body);
-      });
-    });
-
-    if (not posted) {
-      res->writeStatus("503 Service Unavailable")->writeHeader("Content-Type", "application/json; charset=utf-8")->end(http::make_error_json("service_unavailable", "server is stopping"));
-    }
   }
 //-------------------------------------------------------------------------//
 /**

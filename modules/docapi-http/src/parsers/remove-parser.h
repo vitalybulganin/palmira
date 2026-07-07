@@ -14,8 +14,8 @@
 ===========================================================================*/
 #pragma once
 //-------------------------------------------------------------------------//
-#ifndef __INDEX_PARSER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
-#define __INDEX_PARSER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
+#ifndef __REMOVE_PARSER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
+#define __REMOVE_PARSER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
 //-------------------------------------------------------------------------//
 #include <simdjson.h>
 //-------------------------------------------------------------------------//
@@ -41,7 +41,7 @@ namespace docapi::parsers {
      * Validates a body on valid.
      * @param body [in] - A document body.
      */
-    virtual auto validate(std::string_view body) -> void override;
+    virtual auto validate(std::string_view body) const -> void override;
 
     /**
      * Parses a document.
@@ -49,10 +49,10 @@ namespace docapi::parsers {
      * @param opts [in] - Options.
      * @return A parsed object.
      */
-    virtual auto parse(std::string_view body, const mtc::zmap &opts) -> std::unique_ptr<value_type> override;
+    virtual auto parse(std::string_view body, const mtc::zmap &opts) const -> std::unique_ptr<value_type> override;
   };
 //-------------------------------------------------------------------------//
 } // namespace docapi::parsers
 //-------------------------------------------------------------------------//
-#endif // __INDEX_PARSER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
+#endif // __REMOVE_PARSER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
 

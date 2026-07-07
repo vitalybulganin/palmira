@@ -28,9 +28,25 @@ namespace docapi {
     }
   } // namespace
 //-------------------------------------------------------------------------//
+  HttpServer::executer_context::executer_context(const docapi::parsers::insert_parser *parser, const palmira::modules::responsible *resp)
+    : type(executer_types::insert), insert(parser, resp), update(nullptr, nullptr), remove(nullptr, nullptr), search(nullptr, nullptr) {
+  }
+
+  HttpServer::executer_context::executer_context(const docapi::parsers::update_parser *parser, const palmira::modules::responsible *resp)
+    : type(executer_types::update), insert(nullptr, nullptr), update(parser, resp), remove(nullptr, nullptr), search(nullptr, nullptr) {
+  }
+
+  HttpServer::executer_context::executer_context(const docapi::parsers::remove_parser *parser, const palmira::modules::responsible *resp)
+    : type(executer_types::remove), insert(nullptr, nullptr), update(nullptr, nullptr), remove(parser, resp), search(nullptr, nullptr) {
+  }
+
+  HttpServer::executer_context::executer_context(const docapi::parsers::search_parser *parser, const palmira::modules::responsible *resp)
+    : type(executer_types::search), insert(nullptr, nullptr), update(nullptr, nullptr), remove(nullptr, nullptr), search(parser, resp) {
+  }
+//-------------------------------------------------------------------------//
   HttpServer::HttpServer(mtc::api<palmira::IService> srv, mtc::zmap cfg)
     : settings(std::move(cfg)), service(std::move(srv)),
-      pool(std::max(1U, settings.get_int32("workers", 1) == 0 ? std::thread::hardware_concurrency() - 1 : settings.get_int32("workers", 1))) {
+      executer(std::max(1U, settings.get_int32("workers", 1) == 0 ? std::thread::hardware_concurrency() - 1 : settings.get_int32("workers", 1))) {
     if (this->settings.get_int32("listen_port", 0) > 0) {
       g_listen_port = this->settings.get_int32("listen_port", g_listen_port);
     }
@@ -61,7 +77,7 @@ namespace docapi {
       return;
     }
 
-    this->pool.stop();
+    this->executer.stop();
 
     if (this->loop != nullptr) {
       this->loop->defer([this]() {

@@ -69,7 +69,8 @@ namespace docapi::http {
   void send_error_response(response_context<SSL> *ctx, int status, std::string_view error_type, std::string_view reason) {
     service_response response{
       .status = status,
-      .content_type = "application/json"
+      .content_type = "application/json",
+      .body = ""
     };
 
     response.body.reserve(error_type.size() + reason.size() + 96);
@@ -88,35 +89,6 @@ namespace docapi::http {
     response.body += "}";
 
     send_json_response(ctx, response);
-  }
-//-------------------------------------------------------------------------//
-  auto make_json_response(const mtc::zmap &zmap) -> service_response {
-    std::fprintf(stdout, "response: %s\n", mtc::to_string(zmap).c_str());
-
-    auto success = true;
-    const auto elapsed = get_elapsed_ms(zmap.get_int64("started", 0));
-    auto resp = service_response{
-      .status = 200,
-      .content_type = "application/json"
-    };
-
-    try {
-      // Checking response on errors,
-      palmira::modules::check_errors(zmap);
-      //<TODO> Adding checking response on error.
-    } catch (const palmira::modules::palmira_error &exc) {
-      std::fprintf(stderr, "Proceed request failed: (%d) %s\n", exc.code(), exc.what());
-
-      resp.status = 500;
-      success = false;
-    }
-    resp.body = R"({)";
-    resp.body += R"("took":)" + std::to_string(elapsed) + ",";
-    resp.body += R"("errors":)" + std::string(success ? "false" : "true") + ",";
-    resp.body += R"("items": [])";
-    resp.body += R"(})";
-
-    return resp;
   }
 //-------------------------------------------------------------------------//
   template
