@@ -98,7 +98,7 @@ namespace docapi::http {
    * @param query [in] - A query string to parse.
    * @return A map of key-value pairs.
    */
-  query_params_t parse_query(std::string_view query);
+  mtc::zmap parse_query(std::string_view query);
 
   /**
    * Parses get options from query params.
@@ -114,7 +114,7 @@ namespace docapi::http {
    * @param default_value [in] - Default value to return if parameter is not found.
    * @return Parameter value or default value if parameter is not found.
    */
-  auto get_query_param(const query_params_t &params, std::string_view name, std::optional<std::string> default_value = std::nullopt) -> std::optional<std::string>;
+  auto get_query_param(const mtc::zmap &params, std::string_view name, std::optional<std::string> default_value = std::nullopt) -> std::optional<std::string>;
 
   /**
    * Makes index document request.

@@ -55,8 +55,8 @@ namespace docapi::http {
     return {};
   }
 //-------------------------------------------------------------------------//
-  query_params_t parse_query(std::string_view query) {
-    query_params_t params;
+  mtc::zmap parse_query(std::string_view query) {
+    mtc::zmap params;
 
     while (not query.empty()) {
       const std::size_t amp = query.find('&');
@@ -64,9 +64,9 @@ namespace docapi::http {
       const std::size_t eq = pair.find('=');
 
       if (eq == std::string_view::npos) {
-        params.emplace(url_decode(pair), "");
+        params.set_charstr(url_decode(pair), "");
       } else {
-        params.emplace(url_decode(pair.substr(0, eq)), url_decode(pair.substr(eq + 1)));
+        params.set_charstr(url_decode(pair.substr(0, eq)), url_decode(pair.substr(eq + 1)));
       }
 
       if (amp == std::string_view::npos) {
@@ -124,10 +124,10 @@ namespace docapi::http {
     return options;
   }
 
-  auto get_query_param(const query_params_t &params, std::string_view name, std::optional<std::string> default_value /*= std::nullopt*/) -> std::optional<std::string> {
-    const auto found = params.find(name.data());
-    if (found != std::end(params)) {
-      return found->second;
+  auto get_query_param(const mtc::zmap &params, std::string_view name, std::optional<std::string> default_value /*= std::nullopt*/) -> std::optional<std::string> {
+    const auto found = params.get_charstr(name.data());
+    if (found != nullptr) {
+      return found->c_str();
     }
     return default_value;
   }

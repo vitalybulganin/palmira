@@ -2,33 +2,32 @@
 //-------------------------------------------------------------------------//
 namespace docapi::http {
 //-------------------------------------------------------------------------//
-  auto status_to_string(int status) -> std::string_view {
-    switch (status) {
-    case 200: return "200 OK";
-    case 201: return "201 Created";
-    case 202: return "202 Accepted";
-    case 204: return "204 No Content";
+  auto to_string(status_codes code) -> std::string_view {
+    switch (code) {
+      case status_codes::OK: return "200 OK";
+      case status_codes::CREATED: return "201 Created";
+      case status_codes::ACCEPTED: return "202 Accepted";
+      case status_codes::NO_CONTENT: return "204 No Content";
 
-    case 400: return "400 Bad Request";
-    case 401: return "401 Unauthorized";
-    case 403: return "403 Forbidden";
-    case 404: return "404 Not Found";
-    case 405: return "405 Method Not Allowed";
-    case 409: return "409 Conflict";
-    case 413: return "413 Payload Too Large";
-    case 415: return "415 Unsupported Media Type";
-    case 429: return "429 Too Many Requests";
+      case status_codes::BAD_REQUEST: return "400 Bad Request";
+      case status_codes::UNAUTHORIZED: return "401 Unauthorized";
+      case status_codes::FORBIDDEN: return "403 Forbidden";
+      case status_codes::NOT_FOUND: return "404 Not Found";
+      case status_codes::METHOD_NOT_ALLOWED: return "405 Method Not Allowed";
+      case status_codes::CONFLICT: return "409 Conflict";
+      case status_codes::PAYLOAD_TOO_LARGE: return "413 Payload Too Large";
+      case status_codes::UNSUPPORTED_MEDIA_TYPE: return "415 Unsupported Media Type";
+      case status_codes::TOO_MANY_REQUESTS: return "429 Too Many Requests";
 
-    case 500: return "500 Internal Server Error";
-    case 501: return "501 Not Implemented";
-    case 503: return "503 Service Unavailable";
-
-    default: return "500 Internal Server Error";
+      case status_codes::INTERNAL_SERVER_ERROR: return "500 Internal Server Error";
+      case status_codes::NOT_IMPLEMENTED: return "501 Not Implemented";
+      case status_codes::SERVICE_UNAVAILABLE: return "503 Service Unavailable";
     }
+    return "unknown";
   }
 
   auto make_error_json(std::string type, std::string reason) -> std::string {
     return R"({"error":{"type":")" + type + R"(","reason":")" + reason + R"("},"status":500})";
   }
-//-------------------------------------------------------------------------//
+  //-------------------------------------------------------------------------//
 } // namespace docapi::http

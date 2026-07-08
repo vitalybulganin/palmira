@@ -23,6 +23,8 @@
 //-------------------------------------------------------------------------//
 #include <mtc/zmap.h>
 //-------------------------------------------------------------------------//
+#include "errors.h"
+//-------------------------------------------------------------------------//
 namespace uWS {
 //-------------------------------------------------------------------------//
   template<bool SSL>
@@ -56,7 +58,7 @@ namespace docapi::http {
   void send_json_response(response_context<SSL> *ctx, const service_response &response);
 
   template<bool SSL>
-  void send_error_response(response_context<SSL> *ctx, int status, std::string_view error_type, std::string_view reason);
+  void send_error_response(response_context<SSL> *ctx, http::status_codes status, std::string_view error_type, std::string_view reason);
 //-------------------------------------------------------------------------//
 }// namespace docapi::http
 //-------------------------------------------------------------------------//

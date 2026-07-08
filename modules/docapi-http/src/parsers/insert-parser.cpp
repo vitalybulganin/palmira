@@ -2,7 +2,7 @@
 //-------------------------------------------------------------------------//
 #include <common/module-utils.h>
 //-------------------------------------------------------------------------//
-#include "../simd-json/simd-json-visit.h"
+#include "../json/simd-json-visit.h"
 //-------------------------------------------------------------------------//
 namespace docapi::parsers {
 //-------------------------------------------------------------------------//
@@ -25,7 +25,7 @@ namespace docapi::parsers {
     };
 
     // Parsing request body as JSON.
-    json::visit_json_cb(body, [&](const json::json_visit_event &event) {
+    json::visit_json_cb(body, [&](const json::json_visit_event &event) -> bool {
       std::fprintf(stdout, "%s\n", event.as_str().c_str());
 
       // Adding a new block.
@@ -42,6 +42,8 @@ namespace docapi::parsers {
       } else if (event.type == docapi::json::json_value_types::null_value) {
         args->GetTextAPI().AddMarkupTag({event.name.data(), event.name.size()})->AddBlock("");
       }
+
+      return false;
     });
 
     return args;

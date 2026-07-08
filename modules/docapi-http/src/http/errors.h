@@ -22,12 +22,35 @@
 //-------------------------------------------------------------------------//
 namespace docapi::http {
 //-------------------------------------------------------------------------//
+  //!< Supported HTTP error codes.
+  enum class status_codes {
+    OK = 200,
+
+    CREATED = 201,
+    ACCEPTED = 202,
+    NO_CONTENT = 203,
+
+    BAD_REQUEST = 400,
+    UNAUTHORIZED = 401,
+    FORBIDDEN = 403,
+    NOT_FOUND = 404,
+    METHOD_NOT_ALLOWED = 405,
+    CONFLICT = 409,
+    PAYLOAD_TOO_LARGE = 413,
+    UNSUPPORTED_MEDIA_TYPE = 415,
+    TOO_MANY_REQUESTS = 429,
+
+    INTERNAL_SERVER_ERROR = 500,
+    NOT_IMPLEMENTED = 501,
+    SERVICE_UNAVAILABLE = 503
+  };
+//-------------------------------------------------------------------------//
   /**
    * Gets status as a string.
    * @param status [in] - A status code.
    * @return A status as a string.
    */
-  auto status_to_string(int status) -> std::string_view;
+  auto to_string(status_codes code) -> std::string_view;
 
   /**
    * Makes a JSON error response.

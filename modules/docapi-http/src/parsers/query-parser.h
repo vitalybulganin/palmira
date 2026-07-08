@@ -1,8 +1,8 @@
 /*!==========================================================================
 * \file
 * - Program:       docapi-http
-* - File:          search-parser.h
-* - Created:       06/24/2026
+* - File:          query-parser.h
+* - Created:       07/07/2026
 * - Author:        Vitaly Bulganin
 * - Description:
 * - Comments:
@@ -14,36 +14,33 @@
 ===========================================================================*/
 #pragma once
 //-------------------------------------------------------------------------//
-#ifndef __SEARCH_PARSER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
-#define __SEARCH_PARSER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
-//-------------------------------------------------------------------------//
-#include <string_view>
+#ifndef __QUERY_PARSER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
+#define __QUERY_PARSER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
 //-------------------------------------------------------------------------//
 #include <simdjson.h>
 //-------------------------------------------------------------------------//
-#include <service.hpp>
-//-------------------------------------------------------------------------//
 #include "../common/parser.h"
-//-------------------------------------------------------------------------//
-#include "query-parser.h"
 //-------------------------------------------------------------------------//
 namespace docapi::parsers {
 //-------------------------------------------------------------------------//
-  class search_parser : public common::parser<palmira::SearchArgs> {
-    //!< Keeps JSON parser, which is not thread-safe.
-    mutable simdjson::ondemand::parser parser;
+  class search_parser;
+//-------------------------------------------------------------------------//
+  class query_parser : public common::parser<mtc::zmap> {
+    friend class search_parser;
 
-    //!< Keeps a query parser.
-    const std::unique_ptr<parsers::query_parser> query_parser;
+    //!< Keeps JSON parser, which is not thread-safe.
+    simdjson::ondemand::parser parser;
 
   public:
-    //!< Constructor.
-    search_parser();
+    query_parser(const query_parser &) = delete;
+    query_parser(query_parser &&) = delete;
+    query_parser &operator=(const query_parser &) = delete;
+    query_parser &operator=(query_parser &&) = delete;
 
     /**
      * Destructor.
      */
-    virtual ~search_parser() override = default;
+    virtual ~query_parser() override = default;
 
     // Override methods
   public:
@@ -60,9 +57,12 @@ namespace docapi::parsers {
      * @return A parsed object.
      */
     virtual auto parse(std::string_view body, const mtc::zmap &opts) const -> std::unique_ptr<value_type> override;
+
+  protected:
+    //!< Constructor.
+    query_parser() = default;
   };
-//-------------------------------------------------------------------------//
+  //-------------------------------------------------------------------------//
 } // namespace docapi::parsers
 //-------------------------------------------------------------------------//
-#endif // __SEARCH_PARSER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__
-
+#endif // __QUERY_PARSER_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__

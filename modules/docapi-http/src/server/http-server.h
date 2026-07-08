@@ -244,7 +244,7 @@ namespace docapi {
         state->aborted.store(true, std::memory_order_release);
 
         // Replying error message.
-        http::send_error_response(resp_ctx.get(), 413, "payload_too_large", "request body is too large");
+        http::send_error_response(resp_ctx.get(), http::status_codes::INTERNAL_SERVER_ERROR, "payload_too_large", "request body is too large");
         return;
       }
       body->append(chunk.data(), chunk.size());
@@ -260,9 +260,8 @@ namespace docapi {
           auto args = ctx.insert.parser->parse(std::string_view(body), mtc::zmap{
             {"_index",      index},
             {"_request_id", request_id},
-            {"_started", started},
-            {"_method",   "insert"},
-            {"_params", {}} //<TODO> Adding query params support
+            {"_started",    started},
+            {"_params",     params}
           });
 
           // Sending a document to search engine.
@@ -286,9 +285,9 @@ namespace docapi {
             });
           });
         } catch (const std::exception &exc) {
-          http::send_error_response(resp_ctx.get(), 500, "internal_server_error", exc.what());
+          http::send_error_response(resp_ctx.get(), http::status_codes::INTERNAL_SERVER_ERROR, "internal_server_error", exc.what());
         } catch (...) {
-          http::send_error_response(resp_ctx.get(), 500, "internal_server_error", "unknown");
+          http::send_error_response(resp_ctx.get(), http::status_codes::INTERNAL_SERVER_ERROR, "internal_server_error", "unknown");
         }
       });
     });
@@ -297,6 +296,7 @@ namespace docapi {
   template<bool SSL, typename Response, typename Request>
   auto HttpServer::onput(Response *res, Request *req) -> void {
     auto state = std::make_shared<async_response_state>();
+    auto resp_ctx = std::make_shared<http::response_context<SSL>>(res);
     const auto request_started = std::chrono::steady_clock::now();
 
     res->onAborted([state]() {
@@ -312,7 +312,7 @@ namespace docapi {
     // Reserving resources.
     body->reserve(body_size);
 
-    res->onData([this, res, state, index, request_id, params, started = request_started.time_since_epoch().count(), body, body_size](std::string_view chunk, bool last) mutable {
+    res->onData([this, resp_ctx, state, index, request_id, params, started = request_started.time_since_epoch().count(), body, body_size](std::string_view chunk, bool last) mutable {
       const auto timeout = this->settings.get_int32("request_timeout", request_timeout);
 
       if (state->aborted.load(std::memory_order_acquire)) {
@@ -321,7 +321,9 @@ namespace docapi {
 
       if (body->size() + chunk.size() > body_size) {
         state->aborted.store(true, std::memory_order_release);
-        res->writeStatus("413 Payload Too Large")->end(http::make_error_json("payload_too_large", "request body is too large"));
+
+        // Replying error message.
+        http::send_error_response(resp_ctx.get(), http::status_codes::INTERNAL_SERVER_ERROR, "payload_too_large", "request body is too large");
         return;
       }
       body->append(chunk.data(), chunk.size());
@@ -331,9 +333,9 @@ namespace docapi {
       }
 
       // Forwarding a request to search engine.
-      this->executer.enqueue(executer_types::insert, [loop = this->loop, service = this->service, res, index, request_id, body = std::move(*body), params, timeout, state, started](const executer_context &ctx) mutable -> void {
+      this->executer.enqueue(executer_types::insert, [loop = this->loop, service = this->service, resp_ctx, index, request_id, body = std::move(*body), params, timeout, state, started](const executer_context &ctx) mutable -> void {
         auto reply = http::service_response{
-          .status = 200,
+          .status = static_cast<int>(http::status_codes::OK),
           .content_type = "application/json; charset=utf-8",
           .body = ""
         };
@@ -343,9 +345,8 @@ namespace docapi {
           auto args = ctx.insert.parser->parse(std::string_view(body), mtc::zmap{
             {"_index",      index},
             {"_request_id", request_id},
-            {"_started", started},
-            {"_method",   "insert"},
-            {"_params", {}} //<TODO> Adding query params support
+            {"_started",    started},
+            {"_params",     params}
           });
 
           // Sending a document to search engine.
@@ -354,19 +355,18 @@ namespace docapi {
           // Making a response.
           reply.body = ctx.insert.responser->make_reply(resp);
         } catch (const std::exception &exc) {
-          reply.status = 500;
-          reply.body = http::make_error_json("internal_error", exc.what());
+          http::send_error_response(resp_ctx.get(), http::status_codes::INTERNAL_SERVER_ERROR, "internal_server_error", exc.what());
         } catch (...) {
-          reply.status = 500;
-          reply.body = http::make_error_json("internal_error", "unknown error");
+          http::send_error_response(resp_ctx.get(), http::status_codes::INTERNAL_SERVER_ERROR, "internal_server_error", "unknown");
         }
 
-        loop->defer([res, state, reply = std::move(reply)]() mutable {
+        loop->defer([resp_ctx, state, reply = std::move(reply)]() mutable {
           if (state->aborted.load(std::memory_order_acquire)) {
             return;
           }
 
-          res->writeStatus(http::status_to_string(reply.status))->writeHeader("Content-Type", reply.content_type)->end(reply.body);
+          // Replying a response to client.
+          http::send_json_response(resp_ctx.get(), reply);
         });
       });
     });
@@ -392,7 +392,8 @@ namespace docapi {
     // Reserving resources.
     body->reserve(body_size);
 
-    res->onData([this, resp_ctx, state, body, body_size](std::string_view chunk, bool last) mutable {
+    // Reading payload.
+    res->onData([this, resp_ctx, index, request_id, params, routing, state, body, body_size, request_started](std::string_view chunk, bool last) mutable {
       const auto timeout = this->settings.get_int32("request_timeout", request_timeout);
 
       if (state->aborted.load(std::memory_order_acquire)) {
@@ -402,7 +403,7 @@ namespace docapi {
         state->aborted.store(true, std::memory_order_release);
 
         // Replying error message.
-        http::send_error_response(resp_ctx.get(), 413, "payload_too_large", "request body is too large");
+        http::send_error_response(resp_ctx.get(), http::status_codes::PAYLOAD_TOO_LARGE, "payload_too_large", "request body is too large");
         return;
       }
       body->append(chunk.data(), chunk.size());
@@ -410,51 +411,53 @@ namespace docapi {
       if (not last) {
         return;
       }
-    });
 
-    //<!!!> uWebSockets response lives in original event-loop inside.
-    this->executer.enqueue(executer_types::search, [service = this->service, resp_ctx, index, request_id, params, routing, body = std::move(*body), started = request_started.time_since_epoch().count(), state, loop = uWS::Loop::get()](const executer_context &ctx) mutable {
-      try {
-        if (service == nullptr) {
-          throw (std::invalid_argument("Search engine not created"));
-        }
+      //<!!!> uWebSockets response lives in original event-loop inside.
+      this->executer.enqueue(executer_types::search, [service = this->service, resp_ctx, index, request_id, params, routing, body = std::move(*body), started = request_started.time_since_epoch().count(), state, loop = uWS::Loop::get()](const executer_context &ctx) mutable {
+        try {
+          if (service == nullptr) {
+            throw (std::invalid_argument("Search engine not created"));
+          }
 
-        // Parsing insert request.
-        auto args = ctx.search.parser->parse(std::string_view(body), mtc::zmap{
-          {"_index",      index},
-          {"_request_id", request_id},
-          {"_routing",  routing.has_value() ? routing.value() : ""},
-          {"_options",  /*params*/{}}, //<TODO> Adding query params support
-          {"_started",    started}
-        });
-
-        // Forwarding a search request into search engine.
-        service->Search(*args, [resp_ctx, ctx, state, loop](const mtc::zmap &resp) {
-          auto reply = http::service_response{
-            .status = 200,
-            .content_type = "application/json; charset=utf-8",
-            .body = ""
-          };
-
-          // Making a response.
-          reply.body = ctx.search.responser->make_reply(resp);
-
-          loop->defer([resp_ctx, state, reply = std::move(reply)]() mutable {
-            if (state->aborted.load(std::memory_order_acquire)) {
-              return;
-            }
-
-            // Replying a response to client.
-            http::send_json_response(resp_ctx.get(), reply);
+          // Parsing insert request.
+          auto args = ctx.search.parser->parse(std::string_view(body), mtc::zmap{
+            {"_index",      index},
+            {"_request_id", request_id},
+            {"_routing",    routing.has_value() ? routing.value() : ""},
+            {"_options",    params},
+            {"_started",    started}
           });
-        });
-      } catch (const std::exception &exc) {
-        // Replying to error response.
-        http::send_error_response(resp_ctx.get(), 500, "internal_server_error", exc.what());
-      } catch (...) {
-        // Replying to error response.
-        http::send_error_response(resp_ctx.get(), 500, "internal_server_error", "unknown");
-      }
+
+          // Forwarding a search request into search engine.
+          service->Search(*args, [resp_ctx, ctx, state, loop](const mtc::zmap &resp) {
+            auto reply = http::service_response{
+              .status = 200,
+              .content_type = "application/json; charset=utf-8",
+              .body = ""
+            };
+
+            // Making a response.
+            reply.body = ctx.search.responser->make_reply(resp);
+
+            loop->defer([resp_ctx, state, reply = std::move(reply)]() mutable {
+              if (state->aborted.load(std::memory_order_acquire)) {
+                return;
+              }
+
+              // Replying a response to client.
+              http::send_json_response(resp_ctx.get(), reply);
+            });
+          });
+        } catch (const std::exception &exc) {
+          std::fprintf(stderr, "Proceeding request failed: %s\n", exc.what());
+          // Replying to error response.
+          http::send_error_response(resp_ctx.get(), http::status_codes::INTERNAL_SERVER_ERROR, "internal_server_error", exc.what());
+        } catch (...) {
+          std::fprintf(stderr, "Proceeding request failed: unknown\n");
+          // Replying to error response.
+          http::send_error_response(resp_ctx.get(), http::status_codes::INTERNAL_SERVER_ERROR, "internal_server_error", "unknown");
+        }
+      });
     });
   }
 //-------------------------------------------------------------------------//

@@ -59,16 +59,16 @@ namespace docapi::http {
       return;
     }
 
-    ctx->response->writeStatus(docapi::http::status_to_string(response.status));
+    ctx->response->writeStatus(http::to_string(static_cast<http::status_codes>(response.status)));
     ctx->response->writeHeader("Content-Type", response.content_type.empty() ? "application/json" : response.content_type);
     ctx->response->writeHeader("Content-Length", std::to_string(response.body.size()));
     ctx->response->end(response.body);
   }
 
   template<bool SSL>
-  void send_error_response(response_context<SSL> *ctx, int status, std::string_view error_type, std::string_view reason) {
+  void send_error_response(response_context<SSL> *ctx, status_codes status, std::string_view error_type, std::string_view reason) {
     service_response response{
-      .status = status,
+      .status = static_cast<int>(status),
       .content_type = "application/json",
       .body = ""
     };
@@ -85,7 +85,7 @@ namespace docapi::http {
     response.body += R"(")";
     response.body += "},";
     response.body += R"("status":)";
-    response.body += std::to_string(status);
+    response.body += http::to_string(status);
     response.body += "}";
 
     send_json_response(ctx, response);
@@ -98,9 +98,9 @@ namespace docapi::http {
   void send_json_response<true>(response_context<true> *, const service_response&);
 
   template
-  void send_error_response<false>(response_context<false> *, int, std::string_view, std::string_view);
+  void send_error_response<false>(response_context<false> *, http::status_codes, std::string_view, std::string_view);
 
   template
-  void send_error_response<true>(response_context<true> *, int, std::string_view, std::string_view);
+  void send_error_response<true>(response_context<true> *, http::status_codes, std::string_view, std::string_view);
 //-------------------------------------------------------------------------//
 }// namespace docapi::http

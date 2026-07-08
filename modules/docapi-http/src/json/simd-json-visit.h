@@ -76,6 +76,9 @@ namespace docapi::json {
 
       //!< Keeps a value as boolean.
       bool bool_value;
+
+      //!< Keeps a value of object.
+      std::string_view object_value;
     } value;
 
     //!< Keeps index of document.
@@ -89,20 +92,22 @@ namespace docapi::json {
     auto as_str() const noexcept -> std::string;
   };
 //-------------------------------------------------------------------------//
-  using json_visit_callback_t = std::function<void(const json_visit_event &event)>;
+  using json_visit_callback_t = std::function<bool(const json_visit_event &event)>;
 //-------------------------------------------------------------------------//
-  class json_visit_error final : public std::runtime_error {
-  public:
-    explicit json_visit_error(const std::string &message)
-      : std::runtime_error(message) {
+  struct json_visit_error final : public std::runtime_error {
+    /**
+     * Constructor.
+     * @param message [in] - Error message.
+     */
+    explicit json_visit_error(const std::string &message) : std::runtime_error(message) {
     }
   };
 //-------------------------------------------------------------------------//
   namespace detail {
 //-------------------------------------------------------------------------//
-    inline void throw_if_Error(simdjson::error_code error, std::string_view context) {
+    inline void throw_if_error(simdjson::error_code error, std::string_view context) {
       if (error) {
-        throw json_visit_error(std::string(context) + ": " + simdjson::error_message(error));
+        throw (json_visit_error(std::string(context) + ": " + simdjson::error_message(error)));
       }
     }
 
@@ -134,12 +139,13 @@ namespace docapi::json {
     }
 
     template<typename Callback>
-    inline void emit_base(Callback &callback,
+    inline auto emit_base(Callback &callback,
                           std::string_view path,
                           std::string_view name,
                           json_value_types type,
-                          std::uint64_t document_index) {
-      callback(json_visit_event {
+                          std::uint64_t document_index,
+                          bool &skipped) -> void {
+      skipped = callback(json_visit_event{
         .path = path,
         .name = name,
         .type = type,
@@ -149,12 +155,32 @@ namespace docapi::json {
     }
 
     template<typename Callback>
-    inline void emit_string(Callback &callback,
+    inline auto emit_object(Callback &callback,
+                          std::string_view path,
+                          std::string_view name,
+                          std::string_view value,
+                          json_value_types type,
+                          std::uint64_t document_index,
+                          bool &skipped) -> void {
+      skipped = callback(json_visit_event{
+        .path = path,
+        .name = name,
+        .type = type,
+        .value = {
+          .object_value = value
+        },
+        .document_index = document_index
+      });
+    }
+
+    template<typename Callback>
+    inline auto emit_string(Callback &callback,
                             std::string_view path,
                             std::string_view name,
                             std::string_view value,
-                            std::uint64_t document_index) {
-      callback(json_visit_event {
+                            std::uint64_t document_index,
+                            bool &skipped) -> void {
+      skipped = callback(json_visit_event{
         .path = path,
         .name = name,
         .type = json_value_types::string,
@@ -166,12 +192,13 @@ namespace docapi::json {
     }
 
     template<typename Callback>
-    inline void emit_int64(Callback &callback,
+    inline auto emit_int64(Callback &callback,
                            std::string_view path,
                            std::string_view name,
                            std::int64_t value,
-                           std::uint64_t document_index) {
-      callback(json_visit_event {
+                           std::uint64_t document_index,
+                           bool &skipped) -> void {
+      skipped = callback(json_visit_event{
         .path = path,
         .name = name,
         .type = json_value_types::int64,
@@ -183,12 +210,13 @@ namespace docapi::json {
     }
 
     template<typename Callback>
-    inline void emit_uint64(Callback &callback,
+    inline auto emit_uint64(Callback &callback,
                             std::string_view path,
                             std::string_view name,
                             std::uint64_t value,
-                            std::uint64_t document_index) {
-      callback(json_visit_event {
+                            std::uint64_t document_index,
+                            bool &skipped) -> void {
+      skipped = callback(json_visit_event{
         .path = path,
         .name = name,
         .type = json_value_types::uint64,
@@ -200,12 +228,13 @@ namespace docapi::json {
     }
 
     template<typename Callback>
-    inline void emit_double(Callback &callback,
+    inline auto emit_double(Callback &callback,
                            std::string_view path,
                            std::string_view name,
                            double value,
-                           std::uint64_t document_index) {
-      callback(json_visit_event {
+                           std::uint64_t document_index,
+                           bool &skipped) -> void {
+      skipped = callback(json_visit_event{
         .path = path,
         .name = name,
         .type = json_value_types::double_value,
@@ -217,12 +246,13 @@ namespace docapi::json {
     }
 
     template<typename Callback>
-    inline void emit_bool(Callback &callback,
+    inline auto emit_bool(Callback &callback,
                           std::string_view path,
                           std::string_view name,
                           bool value,
-                          std::uint64_t document_index) {
-      callback(json_visit_event {
+                          std::uint64_t document_index,
+                          bool &skipped) -> void {
+      skipped = callback(json_visit_event{
         .path = path,
         .name = name,
         .type = json_value_types::boolean,
@@ -234,131 +264,145 @@ namespace docapi::json {
     }
   //-------------------------------------------------------------------------//
     template<typename Callback>
-    void walkValue(simdjson::ondemand::value value,
+    auto walkValue(simdjson::ondemand::value value,
                    std::string_view path,
                    std::string_view name,
                    Callback &callback,
-                   std::uint64_t document_index);
+                   std::uint64_t document_index,
+                   bool &skipped) -> void;
 
     template<typename Callback>
-    void walkObject(simdjson::ondemand::object object,
+    auto walkObject(simdjson::ondemand::object object,
                     std::string_view path,
                     std::string_view name,
                     Callback &callback,
-                    std::uint64_t document_index) {
-      emit_base(callback, path, name, json_value_types::object_begin, document_index);
-
-      for (auto field_result : object) {
-        simdjson::ondemand::field field;
-        throw_if_Error(std::move(field_result).get(field), "failed to read object field");
-
-        std::string_view key;
-        throw_if_Error(field.unescaped_key(false).get(key), "failed to read key");
-
-        auto child_value = field.value();
-        auto child_path = append_object_path(path, key);
-        walkValue(child_value, child_path, key, callback, document_index);
+                    std::uint64_t document_index,
+                    bool &skipped) -> void {
+      if (path.empty() && name.empty()) {
+        emit_base(callback, path, name, json_value_types::object_begin, document_index, skipped);
+      } else {
+        emit_object(callback, path, name, object.raw_json(), json_value_types::object_begin, document_index, skipped);
       }
 
-      emit_base(callback, path, name, json_value_types::object_end, document_index);
+      if (not skipped) {
+        for (auto field_result : object) {
+          simdjson::ondemand::field field;
+          throw_if_error(std::move(field_result).get(field), "failed to read object field");
+
+          std::string_view key;
+          throw_if_error(field.unescaped_key(false).get(key), "failed to read key");
+
+          auto child_value = field.value();
+          auto child_path = append_object_path(path, key);
+
+          walkValue(child_value, child_path, key, callback, document_index, skipped);
+        }
+      }
+
+      emit_base(callback, path, name, json_value_types::object_end, document_index, skipped);
     }
 
     template<typename Callback>
-    void walkArray(simdjson::ondemand::array array,
+    auto walkArray(simdjson::ondemand::array array,
                    std::string_view path,
                    std::string_view name,
                    Callback &callback,
-                   std::uint64_t document_index) {
-      emit_base(callback, path, name, json_value_types::array_begin, document_index);
+                   std::uint64_t document_index,
+                   bool &skipped) -> void {
+      emit_base(callback, path, name, json_value_types::array_begin, document_index, skipped);
 
-      std::size_t index = 0;
+      if (not skipped) {
+        std::size_t index = 0;
 
-      for (auto element_result : array) {
-        simdjson::ondemand::value element;
-        throw_if_Error(element_result.get(element), "failed to read array element");
+        for (auto element_result : array) {
+          simdjson::ondemand::value element;
+          throw_if_error(element_result.get(element), "failed to read array element");
 
-        std::string child_path = append_array_path(path, index);
-        walkValue(element, child_path, {}, callback, document_index);
+          std::string child_path = append_array_path(path, index);
+          walkValue(element, child_path, {}, callback, document_index, skipped);
 
-        ++index;
+          ++index;
+        }
       }
 
-      emit_base(callback, path, name, json_value_types::array_end, document_index);
+      emit_base(callback, path, name, json_value_types::array_end, document_index, skipped);
     }
 
     template<typename Callback>
-    void walkNumber(simdjson::ondemand::value value, std::string_view path, std::string_view name, Callback &callback, std::uint64_t document_index) {
+    auto walkNumber(simdjson::ondemand::value value, std::string_view path, std::string_view name, Callback &callback, std::uint64_t document_index, bool &skipped) -> void {
       simdjson::ondemand::number number;
-      throw_if_Error(value.get_number().get(number), "failed to read JSON number");
+      throw_if_error(value.get_number().get(number), "failed to read JSON number");
 
       switch (number.get_number_type()) {
         case simdjson::ondemand::number_type::signed_integer: {
-          emit_int64(callback, path, name, number.get_int64(), document_index);
+          emit_int64(callback, path, name, number.get_int64(), document_index, skipped);
           break;
         }
         case simdjson::ondemand::number_type::unsigned_integer: {
-          emit_uint64(callback, path, name, number.get_uint64(), document_index);
+          emit_uint64(callback, path, name, number.get_uint64(), document_index, skipped);
           break;
         }
         case simdjson::ondemand::number_type::floating_point_number: {
-          emit_double(callback, path, name, number.get_double(), document_index);
+          emit_double(callback, path, name, number.get_double(), document_index, skipped);
           break;
         }
       }
     }
-
+//-------------------------------------------------------------------------//
     template<typename Callback>
-    void walkValue(simdjson::ondemand::value value,
+    auto walkValue(simdjson::ondemand::value value,
                    std::string_view path,
                    std::string_view name,
                    Callback &callback,
-                   std::uint64_t document_index) {
+                   std::uint64_t document_index,
+                   bool &skipped) -> void {
       simdjson::ondemand::json_type type;
-      throw_if_Error(value.type().get(type), "failed to detect JSON value type");
+      throw_if_error(value.type().get(type), "failed to detect JSON value type");
 
       switch (type) {
         case simdjson::ondemand::json_type::object: {
           simdjson::ondemand::object object;
-          throw_if_Error(value.get_object().get(object), "failed to get JSON object");
+          throw_if_error(value.get_object().get(object), "failed to get JSON object");
 
-          walkObject(object, path, name, callback, document_index);
+          walkObject(object, path, name, callback, document_index, skipped);
           break;
         }
 
         case simdjson::ondemand::json_type::array: {
           simdjson::ondemand::array array;
-          throw_if_Error(value.get_array().get(array), "failed to get JSON array");
+          throw_if_error(value.get_array().get(array), "failed to get JSON array");
 
-          walkArray(array, path, name, callback, document_index);
+          walkArray(array, path, name, callback, document_index, skipped);
           break;
         }
         case simdjson::ondemand::json_type::string: {
           std::string_view result;
-          throw_if_Error(value.get_string().get(result), "failed to get JSON string");
+          throw_if_error(value.get_string().get(result), "failed to get JSON string");
 
-          emit_string(callback, path, name, result, document_index);
+          emit_string(callback, path, name, result, document_index, skipped);
           break;
         }
         case simdjson::ondemand::json_type::number: {
-          walkNumber(value, path, name, callback, document_index);
+          walkNumber(value, path, name, callback, document_index, skipped);
           break;
         }
         case simdjson::ondemand::json_type::boolean: {
           bool result = false;
-          throw_if_Error(value.get_bool().get(result), "failed to get JSON boolean");
+          throw_if_error(value.get_bool().get(result), "failed to get JSON boolean");
 
-          emit_bool(callback, path, name, result, document_index);
+          emit_bool(callback, path, name, result, document_index, skipped);
           break;
         }
         case simdjson::ondemand::json_type::null: {
-          emit_base(callback, path, name, json_value_types::null_value, document_index);
+          emit_base(callback, path, name, json_value_types::null_value, document_index, skipped);
           break;
         }
       }
     }
 
     template<typename Callback>
-    void visit_single_json_document(std::string_view json, Callback &callback, std::uint64_t document_index) {
+    auto visit_single_json_document(std::string_view json, Callback &callback, std::uint64_t document_index) -> void {
+      auto skipped = false;
       /*
        * simdjson требует padding после входного буфера.
        * padded_string делает безопасную копию.
@@ -367,19 +411,18 @@ namespace docapi::json {
        * сделать padded-буфер сразу при накоплении тела запроса.
        */
       simdjson::padded_string padded_json(json);
-
-      //<!!!> parser is not thread-safe.
-      thread_local simdjson::ondemand::parser parser;
       simdjson::ondemand::value root;
       simdjson::ondemand::document document;
+      //<!!!> parser is not thread-safe.
+      thread_local simdjson::ondemand::parser parser;
 
-      throw_if_Error(parser.iterate(padded_json).get(document), "failed to parse JSON document");
-      throw_if_Error(document.get_value().get(root), "failed to read root JSON value");
+      throw_if_error(parser.iterate(padded_json).get(document), "failed to parse JSON document");
+      throw_if_error(document.get_value().get(root), "failed to read root JSON value");
 
-      walkValue(root, {}, {}, callback, document_index);
+      walkValue(root, {}, {}, callback, document_index, skipped);
     }
 
-    inline bool is_whitespace_only(std::string_view line) {
+    inline auto is_whitespace_only(std::string_view line) -> bool {
       for (const char c: line) {
         if (c != ' ' && c != '\t' && c != '\r' && c != '\n') {
           return false;
@@ -398,14 +441,14 @@ namespace docapi::json {
    * Callback может быть lambda/functor и будет оптимизирован компилятором.
    */
   template<typename Callback>
-  void visit_json_cb(std::string_view json, Callback &&callback) {
+  auto visit_json_cb(std::string_view json, Callback &&callback) -> void {
     auto callback_holder = std::forward<Callback>(callback);
 
     detail::visit_single_json_document(json, callback_holder, 0);
   }
 
   template<typename Callback>
-  void visit_ndjson_cb(std::string_view ndjson, Callback &&callback) {
+  auto visit_ndjson_cb(std::string_view ndjson, Callback &&callback) -> void {
     auto callback_holder = std::forward<Callback>(callback);
     std::uint64_t document_index = 0;
     std::size_t offset = 0;
