@@ -2,7 +2,7 @@
 //-------------------------------------------------------------------------//
 #include "../common/except.h"
 //-------------------------------------------------------------------------//
-#include "../json/simd-json-search-parser.h"
+#include "../json/elastik/simd-json-search-parser.h"
 //-------------------------------------------------------------------------//
 #include "query-parser.h"
 //-------------------------------------------------------------------------//
@@ -17,7 +17,7 @@ namespace docapi::parsers {
   auto search_parser::parse(std::string_view body, const mtc::zmap &opts) const -> std::unique_ptr<value_type> {
     auto args = std::make_unique<value_type>();
     // Parsing a search request.
-    const auto req = json::parse_search_request(body, {opts.get_charstr("_index", "")});
+    const auto req = json::elastik::parse_search_request(body, {opts.get_charstr("_index", "")});
 
     // Setting an order of searching.
     args->order = mtc::zmap{

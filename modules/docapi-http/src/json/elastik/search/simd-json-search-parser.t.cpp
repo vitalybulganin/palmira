@@ -1,15 +1,17 @@
-#include "simd-json-search-parser.h"
+#include "../simd-json-search-parser.h"
 //-------------------------------------------------------------------------//
 #include <gtest/gtest.h>
 //-------------------------------------------------------------------------//
 #include <string>
 #include <vector>
 //-------------------------------------------------------------------------//
+#include "../../simd-json-errors.h"
+//-------------------------------------------------------------------------//
 namespace {
 //-------------------------------------------------------------------------//
   TEST(SimdJsonParserSearchTest, ParseSimpleMatchQuery) {
     const std::string body = R"json({"query": {"match": {"name": "brave"}}})json";
-    auto request = docapi::json::parse_search_request(body, {"test"});
+    auto request = docapi::json::elastik::parse_search_request(body, {"test"});
 
     ASSERT_EQ(request.indices.size(), 1U);
     EXPECT_EQ(request.indices[0], "test");
@@ -53,7 +55,7 @@ namespace {
         }
       })json";
 
-    auto request = docapi::json::parse_search_request(body, {"test"});
+    auto request = docapi::json::elastik::parse_search_request(body, {"test"});
 
     EXPECT_EQ(request.from, 0U);
     EXPECT_EQ(request.size, 25U);
@@ -84,7 +86,7 @@ namespace {
         }
       })json";
 
-    auto request = docapi::json::parse_search_request(body, {"users"});
+    auto request = docapi::json::elastik::parse_search_request(body, {"users"});
 
     EXPECT_EQ(request.query_type, docapi::json::query_kinds::match);
 
@@ -103,7 +105,7 @@ namespace {
         }
       })json";
 
-    auto request = docapi::json::parse_search_request(body, {"users"});
+    auto request = docapi::json::elastik::parse_search_request(body, {"users"});
 
     EXPECT_EQ(request.query_type, docapi::json::query_kinds::match);
 
@@ -125,7 +127,7 @@ namespace {
         }
       })json";
 
-    EXPECT_THROW(docapi::json::parse_search_request(body, {"test"}), docapi::json::parse_error);
+    EXPECT_THROW(docapi::json::elastik::parse_search_request(body, {"test"}), docapi::json::parse_error);
   }
 
   TEST(SimdJsonParserSearchTest, RejectInvalidZeroTermsQuery) {
@@ -141,7 +143,7 @@ namespace {
         }
       })json";
 
-    EXPECT_THROW(docapi::json::parse_search_request(body, {"test"}), docapi::json::parse_error);
+    EXPECT_THROW(docapi::json::elastik::parse_search_request(body, {"test"}), docapi::json::parse_error);
   }
 
   TEST(SimdJsonParserSearchTest, RejectEmptyMatchObject) {
@@ -152,7 +154,7 @@ namespace {
         }
       })json";
 
-    EXPECT_THROW(docapi::json::parse_search_request(body, {"test"}), docapi::json::parse_error);
+    EXPECT_THROW(docapi::json::elastik::parse_search_request(body, {"test"}), docapi::json::parse_error);
   }
 
   TEST(SimdJsonParserSearchTest, DetectMatchAll) {
@@ -163,7 +165,7 @@ namespace {
         }
       })json";
 
-    auto request = docapi::json::parse_search_request(body, {"test"});
+    auto request = docapi::json::elastik::parse_search_request(body, {"test"});
 
     EXPECT_EQ(request.query_type, docapi::json::query_kinds::match_all);
     EXPECT_FALSE(request.match.has_value());
@@ -178,7 +180,7 @@ namespace {
         }
       })json";
 
-    auto request = docapi::json::parse_search_request(body, {"test"});
+    auto request = docapi::json::elastik::parse_search_request(body, {"test"});
 
     EXPECT_EQ(request.query_type, docapi::json::query_kinds::match_none);
     EXPECT_FALSE(request.match.has_value());
@@ -223,7 +225,7 @@ namespace {
         "min_score": 0.5
       })json";
 
-    auto request = docapi::json::parse_search_request(body, {"test"});
+    auto request = docapi::json::elastik::parse_search_request(body, {"test"});
 
     ASSERT_EQ(request.indices.size(), 1U);
     EXPECT_EQ(request.indices[0], "test");
@@ -292,7 +294,7 @@ namespace {
         ]
       })json";
 
-    EXPECT_THROW(docapi::json::parse_search_request(body, {"test"}), docapi::json::parse_error);
+    EXPECT_THROW(docapi::json::elastik::parse_search_request(body, {"test"}), docapi::json::parse_error);
   }
 
   TEST(SimdJsonParserSearchTest, ParseTrackTotalHitsFalse) {
@@ -301,7 +303,7 @@ namespace {
         "track_total_hits": false
       })json";
 
-    auto request = docapi::json::parse_search_request(body, {"test"});
+    auto request = docapi::json::elastik::parse_search_request(body, {"test"});
 
     EXPECT_FALSE(request.track_total_hits_enabled);
     EXPECT_FALSE(request.track_total_hits_limit.has_value());
@@ -317,7 +319,7 @@ namespace {
         }
       })json";
 
-    auto request = docapi::json::parse_search_request(body, {"test"});
+    auto request = docapi::json::elastik::parse_search_request(body, {"test"});
 
     EXPECT_EQ(request.query_type, docapi::json::query_kinds::term);
 
@@ -341,7 +343,7 @@ namespace {
         }
       })json";
 
-    auto request = docapi::json::parse_search_request(body, {"test"});
+    auto request = docapi::json::elastik::parse_search_request(body, {"test"});
 
     EXPECT_EQ(request.query_type, docapi::json::query_kinds::term);
 
@@ -364,7 +366,7 @@ namespace {
         }
       })json";
 
-    EXPECT_THROW(docapi::json::parse_search_request(body, {"test"}), docapi::json::parse_error);
+    EXPECT_THROW(docapi::json::elastik::parse_search_request(body, {"test"}), docapi::json::parse_error);
   }
 
   TEST(SimdJsonParserSearchTest, ParseTermScalarValue) {
@@ -377,7 +379,7 @@ namespace {
         }
       })json";
 
-    auto request = docapi::json::parse_search_request(body, {"test"});
+    auto request = docapi::json::elastik::parse_search_request(body, {"test"});
 
     EXPECT_EQ(request.query_type, docapi::json::query_kinds::term);
 
@@ -385,6 +387,28 @@ namespace {
 
     EXPECT_EQ(request.term->field, "age");
     EXPECT_EQ(request.term->value, "42");
+  }
+
+  TEST(SimdJsonParserSearchTest, ParseTermsQuery) {
+    const std::string body =
+      R"json({
+        "query": {
+          "terms": {
+            "status": ["new", "active", "blocked"]
+          }
+        }
+      })json";
+
+    auto request = docapi::json::elastik::parse_search_request(body, {"test"});
+
+    EXPECT_EQ(request.query_type, docapi::json::query_kinds::terms);
+    ASSERT_TRUE(request.terms.has_value());
+    EXPECT_EQ(request.terms->field, "status");
+
+    ASSERT_EQ(request.terms->values.size(), 3U);
+    EXPECT_EQ(request.terms->values[0], "new");
+    EXPECT_EQ(request.terms->values[1], "active");
+    EXPECT_EQ(request.terms->values[2], "blocked");
   }
 //-------------------------------------------------------------------------//
 } // namespace

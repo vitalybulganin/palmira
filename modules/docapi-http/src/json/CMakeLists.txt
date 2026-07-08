@@ -4,7 +4,7 @@ project(${PROJECT_NAME})
 find_package(GTest REQUIRED)
 
 # Collecting source test files.
-file(GLOB TEST_JSON_SOURCE *.t.cpp)
+file(GLOB_RECURSE TEST_JSON_SOURCE *.t.cpp)
 
 add_executable(${PROJECT_NAME} ${TEST_JSON_SOURCE})
 target_link_libraries(${PROJECT_NAME} PRIVATE
