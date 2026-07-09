@@ -60,6 +60,38 @@ namespace docapi::http {
   template<bool SSL>
   void send_error_response(response_context<SSL> *ctx, http::status_codes status, std::string_view error_type, std::string_view reason);
 //-------------------------------------------------------------------------//
+  namespace elastic {
+//-------------------------------------------------------------------------//
+    /**
+     * Makes a response of indexing a document.
+     * @param resp [in] - A response.
+     * @return A response in JSON format.
+     */
+    auto make_index_response(const mtc::zmap &resp) -> std::string;
+
+    /**
+     * Makes a response of updating a document.
+     * @param resp [in] - A response.
+     * @return A response in JSON format.
+     */
+    auto make_update_response(const mtc::zmap &resp) -> std::string;
+
+    /**
+     * Makes a response of removing a document.
+     * @param resp [in] - A response.
+     * @return A response in JSON format.
+     */
+    auto make_remove_response(const mtc::zmap &resp) -> std::string;
+
+    /**
+     * Makes a response of searching a document.
+     * @param resp [in] - A response.
+     * @return A response in JSON format.
+     */
+    auto make_search_response(const mtc::zmap &resp) -> std::string;
+//-------------------------------------------------------------------------//
+  } // namespace elastic
+//-------------------------------------------------------------------------//
 }// namespace docapi::http
 //-------------------------------------------------------------------------//
 #endif // __DOCRES_H_9A383FB9_69EF_4D2E_8CFD_2640EFA93EE0__

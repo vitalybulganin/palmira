@@ -73,6 +73,7 @@ namespace {
     std::vector<server_t> servers;
     uint8_t port_index = 0;
     palmira::modules::modules_loader loader(config);
+
     // Loading a module.
     loader.load<create_server_t>("createServer", [&](create_server_t on_create_server, const mtc::zmap &module_settings, const char *error) {
       if (error == nullptr) {
@@ -88,7 +89,7 @@ namespace {
     });
 
     if (servers.empty()) {
-      throw std::runtime_error("createServer returned empty server_t");
+      throw (std::invalid_argument("createServer returned empty server_t"));
     }
 
     return servers;
@@ -135,23 +136,14 @@ int main(int argc, char* argv[]) {
   } catch (const mtc::json::parse::error &exc) {
     return fprintf( stderr, "Error parsing config '%s', line %d: %s\n", argv[1], exc.get_json_lineid(), exc.what());
   } catch (const std::exception &exc) {
-    return fprintf( stderr, "Error parsing config '%s': %s\n", argv[1], exc.what());
+    return fprintf(stderr, "Error parsing config '%s': %s\n", argv[1], exc.what());
   } catch (...) {
-    return fprintf( stderr, "Unknown error opening config\n" );
+    return fprintf(stderr, "Unknown error opening config\n");
   }
 
-  // Creating a list of server modules.
-  auto servers = create_server_modules(search, config.get_section("modules"));
-/*<???>
-  try {
-    server = CreateInetServer( search, config );
-  } catch (const std::invalid_argument & xp) {
-    return fprintf(stderr, "Invalid argument: %s\n", xp.what()), EINVAL;
-  }
-*/
-
-// install signals handler
+  // install signals handler
   struct sigaction sa = {0};
+  std::vector<server_t> servers;
 
   sa.sa_handler = onsignal;
   sigemptyset(&sa.sa_mask);
@@ -160,14 +152,21 @@ int main(int argc, char* argv[]) {
   sigaction(SIGTERM, &sa, nullptr);
   sigaction(SIGQUIT, &sa, nullptr);
 
-  g_signal = [&](int signo) {
-    std::fprintf(stdout, "Received signal: %d. The process will be stopped...\n", signo);
-    // Destroying a list of server modules.
-    destroy_server_modules(servers);
+  try {
+    // Creating a list of server modules.
+    servers = create_server_modules(search, config.get_section("modules"));
 
-    // Setting STOPPED state.
-    g_stop_requested.store(true, std::memory_order_release);
-  };
+    g_signal = [&](int signo) {
+      std::fprintf(stdout, "Received signal: %d. The process will be stopped...\n", signo);
+      // Destroying a list of server modules.
+      destroy_server_modules(servers);
+
+      // Setting STOPPED state.
+      g_stop_requested.store(true, std::memory_order_release);
+    };
+  } catch (const std::exception &exc) {
+    return fprintf(stderr, "Creating server failed: %s\n", exc.what()), EINVAL;
+  }
 
   while (not g_stop_requested.load(std::memory_order_acquire)) {
     std::this_thread::sleep_for(std::chrono::milliseconds(200));

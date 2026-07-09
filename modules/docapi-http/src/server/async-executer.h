@@ -22,13 +22,6 @@
 #include <thread>
 #include <vector>
 //-------------------------------------------------------------------------//
-#include "../parsers/insert-parser.h"
-#include "../parsers/update-parser.h"
-#include "../parsers/remove-parser.h"
-#include "../parsers/search-parser.h"
-//-------------------------------------------------------------------------//
-#include "../http/docres-builder.h"
-//-------------------------------------------------------------------------//
 namespace docapi {
 //-------------------------------------------------------------------------//
   enum class executer_types : std::uint8_t {insert = 1, update, remove, search};
@@ -140,15 +133,6 @@ namespace docapi {
 //-------------------------------------------------------------------------//
   template<typename executer_context>
   void async_executer<executer_context>::onrun() noexcept {
-    const auto insert_parser = std::make_unique<docapi::parsers::insert_parser>();
-    const auto insert_responser = http::make_docres_builder().set(http::docres_types::insert).build();
-    const auto update_parser = std::make_unique<docapi::parsers::update_parser>();
-    const auto update_responser = http::make_docres_builder().set(http::docres_types::update).build();
-    const auto remove_parser = std::make_unique<docapi::parsers::remove_parser>();
-    const auto remove_responser = http::make_docres_builder().set(http::docres_types::remove).build();
-    const auto search_parser = std::make_unique<docapi::parsers::search_parser>();
-    const auto search_responser = http::make_docres_builder().set(http::docres_types::search).build();
-
     for (;;) {
       queue_task_t task;
       {
@@ -170,20 +154,10 @@ namespace docapi {
       }
 
       try {
-        switch (task.first) {
-        case executer_types::insert:
-          task.second(executer_context(insert_parser.get(), insert_responser.get()));
-          break;
-        case executer_types::update:
-          task.second(executer_context(update_parser.get(), update_responser.get()));
-          break;
-        case executer_types::remove:
-          task.second(executer_context(remove_parser.get(), remove_responser.get()));
-          break;
-        case executer_types::search:
-          task.second(executer_context(search_parser.get(), search_responser.get()));
-          break;
-        }
+        // Executing a task.
+        task.second(executer_context{
+          .type = task.first
+        });
       } catch (const std::exception &exc) {//<TODO> Adding logging.
         std::fprintf(stderr, "Proceeding request failed: %s\n", exc.what());
       } catch (...) {//<TODO> Adding logging.

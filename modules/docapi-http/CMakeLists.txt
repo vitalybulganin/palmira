@@ -9,7 +9,7 @@ option(DOCAPI_BUILD_SHARED "Build module as shared library" ON)
 option(DOCAPI_ENABLE_SSL "Enable SSL support through uWebSockets" ON)
 option(BUILD_TESTS "Building unit-tests" ON)
 
-set(BUILD_MODULE_TYPE STATIC)
+set(BUILD_MODULE_TYPE SHARED)
 set(UWEBSOCKETS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/uWebSockets)
 set(USOCKETS_DIR ${UWEBSOCKETS_DIR}/uSockets)
 
@@ -19,6 +19,8 @@ find_package(simdjson REQUIRED)
 
 if (DOCAPI_BUILD_SHARED)
     set(BUILD_MODULE_TYPE SHARED)
+else ()
+    set(BUILD_MODULE_TYPE STATIC)
 endif (DOCAPI_BUILD_SHARED)
 
 if (DOCAPI_ENABLE_SSL)
@@ -30,6 +32,8 @@ add_subdirectory(thirdparty)
 
 # Keeps source files.
 file(GLOB_RECURSE SOURCE_FILES src/*.cpp)
+# Removing unit-tests files from target module.
+list(FILTER SOURCE_FILES EXCLUDE REGEX ".*\\.t\\.cpp$")
 
 # Building a module.
 add_library(${PROJECT_NAME} ${BUILD_MODULE_TYPE} ${SOURCE_FILES})

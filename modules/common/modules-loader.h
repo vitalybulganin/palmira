@@ -58,6 +58,13 @@ namespace palmira::modules {
 
           // Saving a new module.
           this->plugins.emplace(module_name, module);
+        } else {
+          const auto error = dlerror();
+          if (error != nullptr) {//<TODO> Adding error handle.
+            std::fprintf(stderr, "Module %s not loaded: %s\n", module_name.c_str(), error);
+          } else {
+            std::fprintf(stderr, "Module not loaded: %s\n", module_name.c_str());
+          }
         }
       };
 

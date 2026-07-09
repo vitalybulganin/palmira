@@ -38,12 +38,11 @@
 #include "../http/docreq.h"
 #include "../http/docres.h"
 //-------------------------------------------------------------------------//
-#include "../parsers/insert-parser.h"
-#include "../parsers/update-parser.h"
-#include "../parsers/remove-parser.h"
-#include "../parsers/search-parser.h"
+#include "../json/elastic/simd-json-index-parser.h"
+#include "../json/elastic/simd-json-search-parser.h"
+#include "../json/elastic/simd-json-mget-parser.h"
 //-------------------------------------------------------------------------//
-#include "../http/docres-builder.h"
+#include "../http/docres.h"
 //-------------------------------------------------------------------------//
 namespace docapi {
 //-------------------------------------------------------------------------//
@@ -59,63 +58,10 @@ namespace docapi {
   class HttpServer : public palmira::IServer {
     using storage_t = mtc::api<structo::IStorage>;
 
-    template<typename parser_t, typename responser_t>
-    struct executer_context_data final {
-      //!< Keeps a parser.
-      const parser_t parser = {};
-
-      //!< Keeps a responser.
-      const responser_t responser = {};
-
-      //!< Constructor.
-      explicit executer_context_data(const parser_t parser_, const responser_t resp)
-        : parser(parser_), responser(resp) {
-      }
-    };
-
+    // Keeps executer context.
     struct executer_context final {
       //!< Keeps a type of executer.
       const executer_types type;
-
-      //!< Keeps inserter.
-      const executer_context_data<const docapi::parsers::insert_parser *, const palmira::modules::responsible *> insert;
-
-      //!< Keeps updater.
-      const executer_context_data<const docapi::parsers::update_parser *, const palmira::modules::responsible *> update;
-
-      //!< Keeps remover.
-      const executer_context_data<const docapi::parsers::remove_parser *, const palmira::modules::responsible *> remove;
-
-      //!< Keeps searcher.
-      const executer_context_data<const docapi::parsers::search_parser *, const palmira::modules::responsible *> search;
-
-      /**
-       * Constructor.
-       * @param parser [in] - Insert parser.
-       * @param resp [in] - A responser.
-       */
-      explicit executer_context(const docapi::parsers::insert_parser *parser, const palmira::modules::responsible *resp);
-
-      /**
-       * Constructor.
-       * @param parser [in] - Update parser.
-       * @param resp [in] - A responser.
-       */
-      explicit executer_context(const docapi::parsers::update_parser *parser, const palmira::modules::responsible *resp);
-
-      /**
-       * Constructor.
-       * @param parser [in] - Remove parser.
-       * @param resp [in] - A responser.
-       */
-      explicit executer_context(const docapi::parsers::remove_parser *parser, const palmira::modules::responsible *resp);
-
-      /**
-       * Constructor.
-       * @param parser [in] - Search parser.
-       * @param resp [in] - A responser.
-       */
-      explicit executer_context(const docapi::parsers::search_parser *parser, const palmira::modules::responsible *resp);
     };
 
     //!< Keeps a server config.
@@ -257,15 +203,15 @@ namespace docapi {
       this->executer.enqueue(executer_types::insert, [loop = this->loop, service = this->service, resp_ctx, index, request_id, body = std::move(*body), params, timeout, &state, started](const executer_context &ctx) mutable -> void {
         try {
           // Parsing insert request.
-          auto args = ctx.insert.parser->parse(std::string_view(body), mtc::zmap{
+          auto args = json::elastic::parse_index_request(std::string_view(body), mtc::zmap{
             {"_index",      index},
             {"_request_id", request_id},
-            {"_started",    started},
-            {"_params",     params}
+            {"_params",     params},
+            {"_started",    started}
           });
 
           // Sending a document to search engine.
-          service->Insert(*args, [&ctx, &loop, resp_ctx, &state](const mtc::zmap &resp) {
+          service->Insert(args, [&ctx, &loop, resp_ctx, &state](const mtc::zmap &resp) {
             auto reply = http::service_response{
               .status = 200,
               .content_type = "application/json; charset=utf-8",
@@ -273,7 +219,7 @@ namespace docapi {
             };
 
             // Making a response.
-            reply.body = ctx.insert.responser->make_reply(resp);
+            reply.body = http::elastic::make_index_response(resp);
 
             loop->defer([resp_ctx, state, reply = std::move(reply)]() mutable {
               if (state->aborted.load(std::memory_order_acquire)) {
@@ -342,32 +288,38 @@ namespace docapi {
 
         try {
           // Parsing insert request.
-          auto args = ctx.insert.parser->parse(std::string_view(body), mtc::zmap{
+          auto args = json::elastic::parse_index_request(std::string_view(body), mtc::zmap{
             {"_index",      index},
             {"_request_id", request_id},
-            {"_started",    started},
-            {"_params",     params}
+            {"_params",     params},
+            {"_started",    started}
           });
 
           // Sending a document to search engine.
-          auto resp = service->Insert(*args)->Wait(timeout);
+          auto resp = service->Insert(args, [&ctx, &loop, resp_ctx, &state](const mtc::zmap &resp) {
+            auto reply = http::service_response{
+              .status = 200,
+              .content_type = "application/json; charset=utf-8",
+              .body = ""
+            };
 
-          // Making a response.
-          reply.body = ctx.insert.responser->make_reply(resp);
+            // Making a response.
+            reply.body = http::elastic::make_index_response(resp);
+
+            loop->defer([resp_ctx, state, reply = std::move(reply)]() mutable {
+              if (state->aborted.load(std::memory_order_acquire)) {
+                return;
+              }
+
+              // Replying a response to client.
+              http::send_json_response(resp_ctx.get(), reply);
+            });
+          });
         } catch (const std::exception &exc) {
           http::send_error_response(resp_ctx.get(), http::status_codes::INTERNAL_SERVER_ERROR, "internal_server_error", exc.what());
         } catch (...) {
           http::send_error_response(resp_ctx.get(), http::status_codes::INTERNAL_SERVER_ERROR, "internal_server_error", "unknown");
         }
-
-        loop->defer([resp_ctx, state, reply = std::move(reply)]() mutable {
-          if (state->aborted.load(std::memory_order_acquire)) {
-            return;
-          }
-
-          // Replying a response to client.
-          http::send_json_response(resp_ctx.get(), reply);
-        });
       });
     });
   }
@@ -419,17 +371,30 @@ namespace docapi {
             throw (std::invalid_argument("Search engine not created"));
           }
 
-          // Parsing insert request.
-          auto args = ctx.search.parser->parse(std::string_view(body), mtc::zmap{
-            {"_index",      index},
-            {"_request_id", request_id},
-            {"_routing",    routing.has_value() ? routing.value() : ""},
-            {"_options",    params},
-            {"_started",    started}
-          });
+          palmira::SearchArgs args;
+          // Parsing a search request.
+          const auto req = json::elastic::parse_search_request(body, {index});
+
+          // Setting an order of searching.
+          args.order = mtc::zmap{
+            {"first",   req.from},
+            {"count", req.size}
+          };
+
+          if (req.query.has_value()) {
+            if (req.query.value()->kind == json::query_kinds::match) {
+              const auto match = std::get<json::elastic::search::match_query>(req.query.value()->data);
+
+              *args.query.set_charstr(match.field) = match.query;
+            } else if (req.query.value()->kind == json::query_kinds::term) {
+              const auto term = std::get<json::elastic::search::term_query>(req.query.value()->data);
+            } else if (req.query.value()->kind == json::query_kinds::terms) {
+              const auto terms = std::get<json::elastic::search::terms_query>(req.query.value()->data);
+            }
+          }
 
           // Forwarding a search request into search engine.
-          service->Search(*args, [resp_ctx, ctx, state, loop](const mtc::zmap &resp) {
+          service->Search(args, [resp_ctx, ctx, state, loop](const mtc::zmap &resp) {
             auto reply = http::service_response{
               .status = 200,
               .content_type = "application/json; charset=utf-8",
@@ -437,7 +402,7 @@ namespace docapi {
             };
 
             // Making a response.
-            reply.body = ctx.search.responser->make_reply(resp);
+            reply.body = http::elastic::make_search_response(resp);
 
             loop->defer([resp_ctx, state, reply = std::move(reply)]() mutable {
               if (state->aborted.load(std::memory_order_acquire)) {
